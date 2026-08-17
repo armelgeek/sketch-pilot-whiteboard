@@ -1,0 +1,145 @@
+{
+  "sceneId": "scene-premium-bag",
+  "canvas": {
+    "width": 1536,
+    "height": 864
+  },
+  "storyBasis": "Croquis doodle : titre \"Premium Image\", un sac à main façon Birkin avec une étiquette de prix barrée ($1500 -> $700), et un point d'interrogation à droite.",
+  "sceneDurationMs": 9500,
+  "elements": [
+    {
+      "id": "title",
+      "label": "Titre \"Premium Image\"",
+      "sequence": 1,
+      "narrativeRole": "Accroche / titre",
+      "subtitle": "Le titre \"Premium Image\" apparaît, souligné d'un trait à main levée.",
+      "type": "text",
+      "region": {
+        "x": 100,
+        "y": 75,
+        "width": 680,
+        "height": 205
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 300,
+        "durationMs": 1600,
+        "maskPaddingPx": 22,
+        "protectedRegions": [],
+        "style": "bounce",
+        "slideFrom": "top"
+      },
+      "handPath": {
+        "start": [
+          440,
+          177.5
+        ],
+        "end": [
+          440,
+          280
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "bag",
+      "label": "Sac à main",
+      "sequence": 2,
+      "narrativeRole": "Sujet principal",
+      "subtitle": "Le sac se dessine au trait, avec ses anses et sa fermeture détaillées.",
+      "type": "object",
+      "region": {
+        "x": 770,
+        "y": 230,
+        "width": 400,
+        "height": 535
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 2000,
+        "durationMs": 3400,
+        "maskPaddingPx": 22,
+        "protectedRegions": [],
+        "style": "slide",
+        "slideFrom": "left"
+      },
+      "handPath": {
+        "start": [
+          970,
+          497.5
+        ],
+        "end": [
+          970,
+          765
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "tag",
+      "label": "Étiquette de prix",
+      "sequence": 3,
+      "narrativeRole": "Détail / accroche prix",
+      "subtitle": "Une étiquette apparaît avec le prix barré 1500$ ramené à 700$.",
+      "type": "prop",
+      "region": {
+        "x": 595,
+        "y": 405,
+        "width": 204,
+        "height": 247
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 5500,
+        "durationMs": 2000,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          697,
+          528.5
+        ],
+        "end": [
+          697,
+          652
+        ],
+        "easing": "easeInOut"
+      },
+      "colorAccentHex": "#ffffff"
+    },
+    {
+      "id": "question",
+      "label": "Point d'interrogation",
+      "sequence": 4,
+      "narrativeRole": "Suspense / appel à la curiosité",
+      "subtitle": "Un point d'interrogation apparaît à droite, laissant planer le doute.",
+      "type": "symbol",
+      "region": {
+        "x": 1170,
+        "y": 220,
+        "width": 201,
+        "height": 380
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 7600,
+        "durationMs": 1400,
+        "maskPaddingPx": 22,
+        "protectedRegions": [],
+        "style": "iris"
+      },
+      "handPath": {
+        "start": [
+          1270.5,
+          410
+        ],
+        "end": [
+          1270.5,
+          600
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

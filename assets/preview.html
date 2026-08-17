@@ -1,0 +1,1647 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SRT Whiteboard Animation - Web Workbench & Preview</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          brand: {
+            gold: '#f5a623',
+            dark: '#0f1115',
+            panel: '#161920',
+            border: '#262a34',
+            input: '#222630',
+          }
+        }
+      }
+    }
+  }
+</script>
+<style type="text/tailwindcss">
+  @layer base {
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #0f1115; color: #e6e8ec; }
+    body { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  }
+  /* Utility classes for JS dynamic state toggles & lists */
+  .mode-switch button.active {
+    @apply bg-blue-600 text-white font-medium;
+  }
+  .dropzone-overlay.active {
+    @apply opacity-100 pointer-events-auto;
+  }
+  canvas.drawing-mode {
+    cursor: crosshair;
+  }
+  .elist li {
+    @apply p-2 rounded-md mb-1 bg-[#20242d] border border-[#2a2e38] cursor-pointer flex gap-2 items-center transition-all duration-150 hover:bg-[#2a2f3a];
+  }
+  .elist li.sel {
+    @apply bg-[#3b2d14] border-[#f5a623];
+  }
+  .elist li.dragging {
+    @apply opacity-40;
+  }
+  .elist li.over {
+    @apply border-blue-500 bg-slate-800;
+  }
+  .elist li .grip {
+    @apply text-slate-500 cursor-grab text-sm;
+  }
+  .elist li .o {
+    @apply text-[#f5a623] font-bold text-xs w-[22px];
+  }
+  .elist li .t {
+    @apply text-blue-400 font-mono text-[11px];
+  }
+  .elist li .nm {
+    @apply flex-1 overflow-hidden text-ellipsis whitespace-nowrap font-medium;
+  }
+  .elist li .badge {
+    @apply text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide shrink-0;
+  }
+  .elist li .badge.structure { @apply bg-amber-900/60 text-amber-300; }
+  .elist li .badge.character { @apply bg-blue-900/60 text-blue-300; }
+  .elist li .badge.effect { @apply bg-purple-900/60 text-purple-300; }
+  .elist li .badge.text { @apply bg-emerald-900/60 text-emerald-300; }
+  .elist li .swatch {
+    @apply w-3 h-3 rounded-full border border-white/30 shrink-0;
+  }
+  .sublist li {
+    @apply px-2.5 py-1.5 rounded-md mb-1 bg-[#1e222a] border border-[#262a33] cursor-pointer flex gap-2 items-baseline text-slate-300 hover:bg-[#262b36];
+  }
+  .sublist li.sel {
+    @apply bg-blue-900/80 border-blue-500 text-white;
+  }
+  .sublist li .o {
+    @apply text-blue-400 font-bold;
+  }
+  .sublist li .s {
+    @apply flex-1 overflow-hidden text-ellipsis whitespace-nowrap text-xs;
+  }
+  .sublist li.empty .s {
+    @apply text-slate-500 italic;
+  }
+  .toast.show {
+    @apply opacity-100 -translate-y-1.5;
+  }
+  .toast.err {
+    @apply bg-red-500;
+  }
+  .toast.info {
+    @apply bg-blue-500;
+  }
+</style>
+</head>
+<body class="bg-[#0f1115] text-[#e6e8ec] font-sans h-screen flex flex-col overflow-hidden m-0">
+<div class="topbar flex items-center gap-2.5 px-4 py-2.5 bg-[#161920] border-b border-[#262a34] flex-wrap z-10">
+  <div class="brand font-bold text-[15px] text-[#f5a623] tracking-wide flex items-center gap-2">
+    🎬 SRT Whiteboard Workbench
+    <span class="brand-tag bg-[#262a33] text-[11px] px-1.5 py-0.5 rounded text-[#8b929c] font-normal">v2.0 Démo Web Live</span>
+  </div>
+  <button id="openBtn" class="bg-blue-600 border border-blue-600 text-white hover:bg-blue-700 rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed">📁 Ouvrir un dossier…</button>
+  <button id="importSrtBtn" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed">📜 Charger sous-titres SRT…</button>
+  
+  <div class="h-4.5 w-px bg-[#363c4a] mx-1"></div>
+  <button id="prevBtn" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>‹</button>
+  <select id="sceneSel" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded-md px-2.5 py-1.5 text-xs max-w-[260px] outline-none disabled:opacity-45 disabled:cursor-not-allowed" disabled><option>Aucune scène chargée</option></select>
+  <button id="nextBtn" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>›</button>
+  <span id="sceneCount" class="text-xs text-[#8b929c]"></span>
+  <div class="mode-switch flex bg-[#222630] rounded-md p-0.5 border border-[#363c4a] ml-1.5">
+    <button id="modeSelectBtn" class="active border-none bg-transparent px-2.5 py-1 text-xs rounded transition-colors cursor-pointer text-[#e6e8ec]">🔍 Sélection / Déplacement</button>
+    <button id="modeDrawBtn" class="border-none bg-transparent px-2.5 py-1 text-xs rounded transition-colors cursor-pointer text-[#e6e8ec]">✏️ Dessiner une zone</button>
+  </div>
+  <span class="flex-1"></span>
+  <label class="flex items-center gap-1.5 cursor-pointer text-[12.5px] text-slate-300">
+    <input type="checkbox" id="overlayToggle" class="accent-blue-500 cursor-pointer" checked> Cadres de zones
+  </label>
+  
+  <span id="dirtyFlag" class="dirty text-[#f5a623] font-semibold text-xs animate-pulse"></span>
+  <div class="flex items-center gap-1.5 bg-[#1b1e26] border border-[#262a34] rounded-md px-2 py-1" title="Options du moteur render_stream_whiteboard.py">
+    <select id="r_inkPath" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-1.5 py-1 text-[11px] outline-none" title="Mode de tracé (--ink-path)">
+      <option value="skeleton" selected>✏️ Skeleton</option>
+      <option value="grid">▦ Grid</option>
+    </select>
+    <select id="r_colorFill" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-1.5 py-1 text-[11px] outline-none" title="Remplissage couleur (--color-fill)">
+      <option value="brush" selected>🖌️ Brush</option>
+      <option value="contour-wipe">〰️ Contour-wipe</option>
+    </select>
+    <select id="r_penStyle" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-1.5 py-1 text-[11px] outline-none" title="Style de stylo (--pen-style)">
+      <option value="stylus" selected>🖊️ Stylus</option>
+      <option value="fine">✒️ Fine</option>
+      <option value="marker">🖍️ Marker</option>
+    </select>
+    <label class="flex items-center gap-1 text-[11px] text-slate-300 cursor-pointer pl-1" title="Rotation de la main selon le trait (--hand-rotate)">
+      <input type="checkbox" id="r_handRotate" class="accent-blue-500 cursor-pointer"> Rotation main
+    </label>
+  </div>
+  <button id="generateAnnoBtn" class="bg-amber-600 border border-amber-600 text-white hover:bg-amber-700 rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>🤖 Générer Annotation AI</button>
+  <button id="renderPyMp4Btn" class="bg-purple-600 border border-purple-600 text-white hover:bg-purple-700 rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>🎬 Rendu MP4 Python</button>
+  <button id="exportWebmBtn" class="bg-emerald-500 border border-emerald-500 text-white hover:bg-emerald-600 rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>🎥 Export WebM Rapide</button>
+  <button id="saveBtn" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>💾 Enregistrer JSON</button>
+  <button id="saveAllBtn" class="bg-blue-600 border border-blue-600 text-white hover:bg-blue-700 rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>💾 Enregistrer Tout</button>
+</div>
+<div class="body flex-1 flex min-h-0 relative" id="mainBody">
+  <!-- Full Page Drag & Drop Overlay -->
+  <div class="dropzone-overlay absolute inset-0 bg-[#0f1115]/92 border-2 border-dashed border-blue-500 flex flex-col items-center justify-center z-[100] opacity-0 pointer-events-none transition-opacity duration-200 backdrop-blur-sm" id="dropOverlay">
+    <div class="dropzone-icon text-5xl mb-3 text-blue-500">📥</div>
+    <div class="dropzone-title text-xl font-semibold text-white mb-1.5">Déposez les fichiers ou dossiers ici</div>
+    <div class="dropzone-sub text-sm text-[#9aa1ab]">Prise en charge des images (.png, .jpg), sous-titres (.srt) et configurations (.annotation.json)</div>
+  </div>
+  <div class="stage-wrap flex-1 flex items-center justify-center overflow-auto p-5 bg-[#0b0c0e] relative">
+    <div id="hint" class="hint p-10 text-[#9aa1ab] text-sm leading-relaxed max-w-[720px] bg-[#161920] rounded-xl border border-[#262a34] text-center">
+      <h2 class="text-white text-xl font-bold mt-0 mb-4">👋 Bienvenue sur SRT Whiteboard Animation !</h2>
+      <p>Vous pouvez <b class="text-[#f5a623]">Glisser & Déposer (Drag & Drop)</b> des dossiers, images <code class="bg-[#222630] px-2 py-0.5 rounded text-blue-400 font-mono">.png</code> ou sous-titres <code class="bg-[#222630] px-2 py-0.5 rounded text-blue-400 font-mono">.srt</code> directement dans cette fenêtre.</p>
+      <div class="text-left bg-[#101216] p-4 rounded-lg my-4 text-xs leading-relaxed">
+        📌 <b>Instructions d'utilisation :</b><br>
+        1. <b>Glissez-déposez vos fichiers</b> images <code class="bg-[#222630] px-1.5 py-0.5 rounded text-blue-400 font-mono">.png</code> ou sous-titres <code class="bg-[#222630] px-1.5 py-0.5 rounded text-blue-400 font-mono">.srt</code> sur la page.<br>
+        2. Passez en mode <b>✏️ Dessiner une zone</b> puis glissez votre curseur sur l'image pour tracer rapidement une zone.<br>
+        3. Cliquez sur le bouton <b>▶ Play</b> ci-dessous pour prévisualiser l'animation de dessin en direct !<br>
+        4. Cliquez sur <b>🎥 Export WebM Rapide</b> pour télécharger instantanément votre vidéo démo sans exécuter Python !
+      </div>
+      <div class="drop-btn-box mt-5 flex gap-3 justify-center">
+        <button id="hintOpenBtn" class="bg-blue-600 border border-blue-600 text-white hover:bg-blue-700 rounded-md px-5 py-2.5 text-sm font-medium transition-all duration-150 cursor-pointer inline-flex items-center gap-1.25">📁 Choisir un dossier de scènes</button>
+        <button id="hintSrtBtn" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded-md px-5 py-2.5 text-sm font-medium transition-all duration-150 cursor-pointer inline-flex items-center gap-1.25">📜 Charger un fichier SRT</button>
+      </div>
+    </div>
+    <canvas id="canvas" class="block max-w-full max-h-[calc(100vh-190px)] shadow-[0_10px_40px_rgba(0,0,0,0.6)] bg-[#fffff] rounded-md touch-none cursor-default" hidden></canvas>
+  </div>
+  <aside class="side w-[340px] shrink-0 bg-[#161920] border-l border-[#262a34] overflow-y-auto p-4 flex flex-col gap-3.5" id="side" hidden>
+    <div>
+      <h3 class="m-0 mb-1.5 text-xs uppercase tracking-wider text-[#8b929c] flex justify-between items-center font-semibold">ZONES DE DESSIN <span id="elemCount" class="text-[#8b929c]"></span></h3>
+      <p class="tip m-0 mb-1.5 text-xs text-gray-400">Glissez-déposez la liste ci-dessous pour réorganiser l'ordre d'apparition</p>
+      <ul id="elist" class="elist list-none m-0 p-0 text-[12.5px]"></ul>
+      <div class="row-btns flex gap-2 mt-2">
+        <button id="addBtn" class="flex-1 justify-center bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25">＋ Ajouter zone</button>
+        <button id="delBtn" class="flex-1 justify-center bg-red-500 border border-red-500 text-white hover:bg-red-600 rounded-md px-3 py-1.5 cursor-pointer text-xs font-medium transition-all duration-150 inline-flex items-center gap-1.25 disabled:opacity-45 disabled:cursor-not-allowed" disabled>🗑 Supprimer zone</button>
+      </div>
+    </div>
+    <div>
+      <h3 class="m-0 mb-1.5 text-xs uppercase tracking-wider text-[#8b929c] flex justify-between items-center font-semibold">PROPRIÉTÉS DE LA ZONE</h3>
+      <div class="fields grid grid-cols-[80px_1fr] gap-2 items-center text-[12.5px] bg-[#1b1e26] p-2.5 rounded-md border border-[#262a34]" id="fields">
+        <label class="text-slate-400 font-medium">Nom zone</label><input type="text" id="f_label" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Type</label>
+        <select id="f_type" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+          <option value="structure">Structure (décor)</option>
+          <option value="character">Personnage</option>
+          <option value="effect">Effet</option>
+          <option value="text">Texte</option>
+        </select>
+        <label class="text-slate-400 font-medium">Position X</label><input type="number" id="f_x" min="0" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Position Y</label><input type="number" id="f_y" min="0" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Largeur</label><input type="number" id="f_w" min="1" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Hauteur</label><input type="number" id="f_h" min="1" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Direction</label>
+        <select id="f_dir" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+          <option value="top_to_bottom">De haut en bas</option>
+          <option value="bottom_to_top">De bas en haut</option>
+          <option value="left_to_right">De gauche à droite</option>
+          <option value="right_to_left">De droite à gauche</option>
+        </select>
+        <label class="text-slate-400 font-medium">Style reveal</label>
+        <select id="f_style" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+          <option value="">✏️ Dessin main (défaut)</option>
+          <option value="wipe">➡️ Balayage (wipe)</option>
+          <option value="fade">🌫️ Fondu (fade)</option>
+          <option value="typewriter">⌨️ Machine à écrire (texte)</option>
+          <option value="zoom">🔍 Zoom (pop-in)</option>
+          <option value="slide">↔️ Glissement (slide)</option>
+          <option value="rotate">🔄 Rotation</option>
+          <option value="iris">⭕ Iris (cercle)</option>
+          <option value="bounce">⬇️ Rebond (bounce)</option>
+        </select>
+        <label class="text-slate-400 font-medium" id="f_slideFromLabel" style="display:none">Départ (slide)</label>
+        <select id="f_slideFrom" style="display:none" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+          <option value="left">Gauche</option>
+          <option value="right">Droite</option>
+          <option value="top">Haut</option>
+          <option value="bottom">Bas</option>
+        </select>
+        <label class="text-slate-400 font-medium">Début (ms)</label><input type="number" id="f_start" min="0" step="100" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Durée (ms)</label><input type="number" id="f_dur" min="100" step="100" placeholder="Durée en ms" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Fin (ms)</label><input type="number" id="f_end" min="0" step="100" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
+        <label class="text-slate-400 font-medium">Forme zone</label>
+        <div class="flex gap-1.5">
+          <button id="f_shapeRect" type="button" class="flex-1 text-[11px] py-1 bg-blue-600 text-white rounded font-medium disabled:opacity-50" disabled>▭ Rectangle</button>
+          <button id="f_shapeHex" type="button" class="flex-1 text-[11px] py-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded hover:bg-[#2d3342] disabled:opacity-50" disabled>⬡ Hexagone</button>
+        </div>
+        <label class="text-slate-400 font-medium">Couleur accent</label>
+        <div class="flex items-center gap-1.5">
+          <input type="color" id="f_colorAccent" value="#f5a623" class="bg-[#222630] border border-[#363c4a] rounded w-8 h-6 p-0.5 cursor-pointer disabled:opacity-50" disabled>
+          <button id="f_colorAccentClear" type="button" class="text-[10px] text-slate-400 hover:text-white underline disabled:opacity-50" disabled>aucune</button>
+        </div>
+      </div>
+      <div class="fields grid grid-cols-[80px_1fr] gap-2 items-start text-[12.5px] bg-[#1b1e26] p-2.5 rounded-md border border-[#262a34] mt-2" id="textFields">
+        <label class="text-slate-400 font-medium pt-1">Texte détecté</label>
+        <input type="text" id="f_detectedText" readonly placeholder="(aucun — pas un élément texte extrait de l'image)" class="bg-[#181b22] text-emerald-300 border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none cursor-not-allowed">
+        <label class="text-slate-400 font-medium pt-1">Légende manuscrite</label>
+        <textarea id="f_textContent" rows="2" placeholder="Texte synthétique à écrire à la main (ex: sous-titre injecté)…" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none resize-y focus:border-blue-500 disabled:opacity-50" disabled></textarea>
+      </div>
+      <div class="mt-2 flex flex-col gap-1.5">
+        <div class="flex gap-1.5">
+          <button id="quickSubAlignBtn" class="flex-1 text-[11.5px] px-1.5 py-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded cursor-pointer transition-all disabled:opacity-45 disabled:cursor-not-allowed" disabled>⏱ Synchroniser SRT</button>
+          <button id="quickDurSetBtn" class="flex-1 text-[11.5px] px-1.5 py-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded cursor-pointer transition-all disabled:opacity-45 disabled:cursor-not-allowed" disabled>⚡ Appliquer durée à tout...</button>
+        </div>
+        <div class="flex gap-1">
+          <button id="durMinusBtn" class="flex-1 text-[11px] p-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded cursor-pointer transition-all disabled:opacity-45 disabled:cursor-not-allowed" disabled>-500ms</button>
+          <button id="durPlusBtn" class="flex-1 text-[11px] p-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded cursor-pointer transition-all disabled:opacity-45 disabled:cursor-not-allowed" disabled>+500ms</button>
+          <button id="durSpeed2x" class="flex-1 text-[11px] p-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded cursor-pointer transition-all disabled:opacity-45 disabled:cursor-not-allowed" disabled>Plus rapide 2x</button>
+          <button id="durSpeedHalf" class="flex-1 text-[11px] p-1 bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342] hover:border-[#4a5266] rounded cursor-pointer transition-all disabled:opacity-45 disabled:cursor-not-allowed" disabled>Plus lent 0.5x</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <h3 class="m-0 mb-1.5 text-xs uppercase tracking-wider text-[#8b929c] flex justify-between items-center font-semibold">SOUS-TITRES LIÉS</h3>
+      <textarea id="f_sub" rows="3" placeholder="Saisissez la réplique ou sous-titre lié à cet élément..." class="w-full bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded-md p-2 text-[12.5px] resize-y font-sans outline-none min-h-[50px] focus:border-blue-500 disabled:opacity-50" disabled></textarea>
+      <h3 class="m-0 mt-2.5 mb-1.5 text-xs uppercase tracking-wider text-[#8b929c] flex justify-between items-center font-semibold">LISTE DES SOUS-TITRES</h3>
+      <ul id="sublist" class="sublist list-none m-0 p-0 text-[12.5px]"></ul>
+    </div>
+  </aside>
+</div>
+<div class="controls flex items-center gap-3.5 px-4.5 py-3 bg-[#161920] border-t border-[#262a34] z-10">
+  <button id="playBtn" class="play w-10.5 h-10.5 text-lg rounded-full justify-center p-0 shrink-0 bg-blue-600 border border-blue-600 text-white hover:bg-blue-700 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed flex items-center" disabled>▶</button>
+  <input type="range" id="timeline" min="0" max="1000" value="0" class="flex-1 accent-blue-500 cursor-pointer h-1.5" disabled>
+  <span id="tlabel" class="tlabel font-mono text-slate-400 text-xs font-medium min-w-[140px] text-right">0.00s / 0.00s</span>
+</div>
+<div id="toast" class="toast fixed bottom-[70px] left-1/2 -translate-x-1/2 bg-emerald-500 text-white px-5 py-2.5 rounded-lg text-[13.5px] font-semibold opacity-0 transition-all duration-200 pointer-events-none z-[1000] shadow-[0_10px_25px_rgba(0,0,0,0.5)]"></div>
+<!-- Hidden File Inputs -->
+<input type="file" id="fileInputDir" webkitdirectory multiple hidden>
+<input type="file" id="fileInputSrt" accept=".srt" hidden>
+<input type="file" id="fileInputFiles" accept=".png,.jpg,.jpeg,.json,.srt" multiple hidden>
+<script>
+const $ = id => document.getElementById(id);
+const canFS = 'showDirectoryPicker' in window;
+const IMG_EXT = ['.png', '.jpg', '.jpeg'];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const canvas = $('canvas'), ctx = canvas.getContext('2d');
+const mask = document.createElement('canvas'), maskCtx = mask.getContext('2d');
+const hand = new Image(); hand.src = './drawing-hand.png';
+const TYPE_COLORS = {
+  structure: '#f5a623',
+  character: '#3b82f6',
+  effect: '#a855f7',
+  text: '#10b981'
+};
+const S = {
+  scenes: [], idx: -1, cfg: null, cfgHandle: null, dirHandle: null,
+  source: null, paper: '#fdf0d0', time: 0, sel: 0, playing: false, last: 0,
+  showOverlay: true, dirty: new Set(), drag: null, dragRow: -1,
+  mode: 'select', // 'select' | 'draw'
+  newBoxStart: null,
+  srtItems: []
+};
+const els = () => S.cfg ? S.cfg.elements : [];
+const endMs = e => e.reveal.startMs + e.reveal.durationMs;
+function totalMs() {
+  const arr = els();
+  const maxEnd = arr.length ? Math.max(...arr.map(endMs)) : 0;
+  return Math.max(S.cfg && S.cfg.sceneDurationMs || 0, maxEnd + 500, 1000);
+}
+// ---------- SRT Parser ----------
+function parseSRT(text) {
+  const items = [];
+  const blocks = text.trim().replace(/\r\n/g, '\n').split(/\n\n+/);
+  blocks.forEach(block => {
+    const lines = block.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length >= 2) {
+      const timeLineIndex = lines[0].includes('-->') ? 0 : 1;
+      const timeMatch = lines[timeLineIndex] ? lines[timeLineIndex].match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/) : null;
+      if (timeMatch) {
+        const startMs = (+timeMatch[1]*3600 + +timeMatch[2]*60 + +timeMatch[3])*1000 + +timeMatch[4];
+        const endMs = (+timeMatch[5]*3600 + +timeMatch[6]*60 + +timeMatch[7])*1000 + +timeMatch[8];
+        const content = lines.slice(timeLineIndex + 1).join(' ');
+        items.push({ startMs, endMs, content });
+      }
+    }
+  });
+  return items;
+}
+// ---------- DRAG AND DROP SETUP ----------
+const dropOverlay = $('dropOverlay');
+const mainBody = $('mainBody');
+['dragenter', 'dragover'].forEach(eventName => {
+  window.addEventListener(eventName, e => {
+    e.preventDefault(); e.stopPropagation();
+    dropOverlay.classList.add('active');
+  }, false);
+});
+['dragleave', 'drop'].forEach(eventName => {
+  dropOverlay.addEventListener(eventName, e => {
+    e.preventDefault(); e.stopPropagation();
+    dropOverlay.classList.remove('active');
+  }, false);
+});
+dropOverlay.addEventListener('drop', async e => {
+  const dt = e.dataTransfer;
+  const files = [...dt.files];
+  if (files.length > 0) {
+    await processDroppedFiles(files);
+  }
+});
+async function processDroppedFiles(files) {
+  const srtFile = files.find(f => f.name.toLowerCase().endsWith('.srt'));
+  if (srtFile) {
+    const txt = await srtFile.text();
+    S.srtItems = parseSRT(txt);
+    toast(`${S.srtItems.length} sous-titre(s) chargé(s) depuis ${srtFile.name}`);
+  }
+  const imgFiles = files.filter(f => IMG_EXT.some(ext => f.name.toLowerCase().endsWith(ext)));
+  const jsonFiles = files.filter(f => f.name.toLowerCase().endsWith('.annotation.json'));
+  if (imgFiles.length > 0) {
+    const newScenes = [];
+    for (const imgF of imgFiles) {
+      const base = baseName(imgF.name);
+      const matchedJson = jsonFiles.find(j => j.name === base + '.annotation.json');
+      let cfg = null;
+      if (matchedJson) {
+        try { cfg = JSON.parse(await matchedJson.text()); } catch (err) {}
+      }
+      const url = URL.createObjectURL(imgF);
+      newScenes.push({
+        name: base,
+        imgName: imgF.name,
+        cfgName: base + '.annotation.json',
+        cfg: cfg,
+        cfgHandle: null,
+        imgUrl: url,
+        hasConfig: !!cfg
+      });
+    }
+    S.scenes = newScenes;
+    updateSceneSelector();
+    loadScene(0);
+    toast(`${newScenes.length} image(s) chargée(s) dans le workbench !`);
+  }
+}
+// ---------- FILEDICKER HANDLERS ----------
+$('openBtn').addEventListener('click', openDir);
+$('hintOpenBtn').addEventListener('click', openDir);
+async function openDir() {
+  try {
+    if (canFS) {
+      const dir = await window.showDirectoryPicker({ mode: 'readwrite' });
+      S.dirHandle = dir;
+      const handles = {};
+      for await (const [name, h] of dir.entries()) if (h.kind === 'file') handles[name] = h;
+      await loadPairs(Object.keys(handles), n => handles[n].getFile(), n => handles[n]);
+    } else { $('fileInputDir').click(); }
+  } catch (e) { if (e && e.name !== 'AbortError') toast('Échec de l\'ouverture du dossier : ' + e.message, true); }
+}
+$('fileInputDir').addEventListener('change', async () => {
+  const files = {}; [...$('fileInputDir').files].forEach(f => files[f.name] = f);
+  S.dirHandle = null;
+  await loadPairs(Object.keys(files), n => files[n], () => null);
+});
+$('importSrtBtn').addEventListener('click', () => $('fileInputSrt').click());
+$('hintSrtBtn').addEventListener('click', () => $('fileInputSrt').click());
+$('fileInputSrt').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const text = await file.text();
+    S.srtItems = parseSRT(text);
+    toast(`${S.srtItems.length} sous-titres chargés avec succès depuis le fichier SRT !`);
+    renderSubs();
+  }
+});
+function baseName(n) { const ext = IMG_EXT.find(e => n.toLowerCase().endsWith(e)); return ext ? n.slice(0, -ext.length) : n; }
+const pairedImageNames = names => names.filter(n => IMG_EXT.some(e => n.toLowerCase().endsWith(e))).sort();
+async function loadPairs(names, getFile, getHandle) {
+  const imgNames = pairedImageNames(names);
+  const scenes = [];
+  for (const inm of imgNames) {
+    const base = baseName(inm), cfgName = base + '.annotation.json';
+    let cfg = null, cfgHandle = null;
+    if (names.includes(cfgName)) {
+      try { cfg = JSON.parse(await (await getFile(cfgName)).text()); }
+      catch (e) { toast(`Fichier ${cfgName} ignoré : erreur JSON`, true); }
+      cfgHandle = getHandle(cfgName);
+    }
+    const url = URL.createObjectURL(await getFile(inm));
+    scenes.push({ name: base, imgName: inm, cfgName, cfg, cfgHandle, imgUrl: url, hasConfig: !!cfg });
+  }
+  if (!scenes.length) { toast('Aucune image valide trouvée', true); return; }
+  S.scenes = scenes; S.dirty.clear();
+  updateSceneSelector();
+  loadScene(0);
+}
+// ---------- PYTHON LOCAL RENDER API ----------
+const renderPyBtn = $('renderPyMp4Btn');
+if (renderPyBtn) {
+  renderPyBtn.addEventListener('click', async (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (!S.cfg || S.idx < 0 || !S.scenes[S.idx]) return;
+    const sc = S.scenes[S.idx];
+    toast('⚙️ Rendu MP4 en cours via le processeur Python local...', false);
+    renderPyBtn.disabled = true;
+    try {
+      if (sc.cfg && sc.cfg.elements && sc.cfg.elements.length) {
+        sc.cfg.sceneDurationMs = totalMs();
+      }
+      
+      // Attempt silent API save to server if available
+      try {
+        await fetch('/api/save_annotation', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            path: sc.jsonPath || (sc.imgPath ? sc.imgPath.replace(/\.(png|jpe?g)$/i, '.annotation.json') : `examples/${sc.cfgName}`),
+            config: sc.cfg
+          })
+        });
+        S.dirty.delete(S.idx);
+        $('dirtyFlag').textContent = '';
+        updateSaveBtns();
+      } catch (saveErr) {}
+      const resp = await fetch('/api/render_scene', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imgPath: sc.imgPath || sc.relImgPath || sc.imgName,
+          jsonPath: sc.jsonPath || sc.cfgName,
+          config: sc.cfg,
+          renderOpts: {
+            inkPath: $('r_inkPath').value,
+            colorFill: $('r_colorFill').value,
+            penStyle: $('r_penStyle').value,
+            handRotate: $('r_handRotate').checked
+          }
+        })
+      });
+      const res = await resp.json();
+      if (res.status === 'ok') {
+        toast('🎉 Rendu MP4 Python terminé avec succès !');
+        const v = $('modalVideoPlayer');
+        if (v) {
+          v.src = res.videoUrl;
+          v.play().catch(() => {});
+          if ($('downloadMp4Link')) $('downloadMp4Link').href = res.videoUrl;
+          if ($('videoModal')) $('videoModal').style.display = 'flex';
+        }
+      } else {
+        toast('Erreur de rendu Python : ' + (res.error || 'Échec du processeur'), true);
+      }
+    } catch (err) {
+      toast('Connexion à l\'API locale impossible : ' + err.message + '. Veuillez démarrer server.py !', true);
+    } finally {
+      renderPyBtn.disabled = false;
+    }
+  });
+}
+const genAnnoBtn = $('generateAnnoBtn');
+if (genAnnoBtn) {
+  genAnnoBtn.addEventListener('click', async (e) => {
+    if (e) { e.preventDefault(); e.stopPropagation(); }
+    if (S.idx < 0 || !S.scenes[S.idx]) return;
+    const sc = S.scenes[S.idx];
+    toast('🤖 Génération de l\'annotation AI en cours via l\'API Python...', false);
+    genAnnoBtn.disabled = true;
+    try {
+      const resp = await fetch('/api/generate_annotation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          imgPath: sc.imgPath || sc.relImgPath || sc.imgName,
+          jsonPath: sc.jsonPath || sc.cfgName
+        })
+      });
+      const res = await resp.json();
+      if (res.status === 'ok' && res.config) {
+        sc.cfg = res.config;
+        sc.hasConfig = true;
+        sc.jsonPath = res.jsonPath || sc.jsonPath;
+        S.cfg = res.config;
+        S.dirty.delete(S.idx);
+        $('dirtyFlag').textContent = '';
+        updateSaveBtns(); syncEditor(); renderList(); renderSubs(); setTime(0); render();
+        // Sauvegarde immédiate sur le serveur Python
+        try {
+          await fetch('/api/save_annotation', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              path: sc.jsonPath || (sc.imgPath ? sc.imgPath.replace(/\.(png|jpe?g)$/i, '.annotation.json') : `examples/${sc.cfgName}`),
+              config: sc.cfg
+            })
+          });
+        } catch(e) {}
+        toast('🎉 Annotation AI générée et sauvegardée !');
+      } else {
+        toast('Erreur lors de la génération d\'annotation : ' + (res.error || 'Échec du processeur'), true);
+      }
+    } catch (err) {
+      toast('Connexion à l\'API locale impossible : ' + err.message + '. Veuillez démarrer server.py !', true);
+    } finally {
+      genAnnoBtn.disabled = false;
+    }
+  });
+}
+// Auto-load scenes from server if available on page load
+async function autoLoadServerScenes() {
+  try {
+    const resp = await fetch('/api/scenes');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (data && data.scenes && data.scenes.length > 0) {
+      const serverScenes = [];
+      for (const s of data.scenes) {
+        let cfg = null;
+        if (s.jsonPath) {
+          try {
+            const r = await fetch(s.jsonPath);
+            if (r.ok) cfg = await r.json();
+          } catch (e) {}
+        }
+        serverScenes.push({
+          name: s.name,
+          imgName: s.name + '.png',
+          cfgName: s.name + '.annotation.json',
+          imgPath: s.imgPath,
+          jsonPath: s.jsonPath,
+          cfg: cfg,
+          cfgHandle: null,
+          imgUrl: s.imgPath,
+          hasConfig: !!cfg
+        });
+      }
+      if (serverScenes.length > 0) {
+        S.scenes = serverScenes;
+        S.dirty.clear();
+        updateSceneSelector();
+        loadScene(0);
+        toast(`🎉 ${serverScenes.length} scène(s) chargée(s) depuis le serveur Python local !`);
+      }
+    }
+  } catch (e) {}
+}
+window.addEventListener('DOMContentLoaded', autoLoadServerScenes);
+function updateSceneSelector() {
+  const sel = $('sceneSel');
+  sel.innerHTML = S.scenes.map((s, i) => `<option value="${i}">${i+1}. ${s.name}${s.hasConfig ? '' : ' (Auto)'}</option>`).join('');
+  sel.disabled = $('prevBtn').disabled = $('nextBtn').disabled = false;
+  $('sceneCount').textContent = `Total : ${S.scenes.length} scène(s)`;
+  $('hint').hidden = true; canvas.hidden = false; $('side').hidden = false;
+  $('playBtn').disabled = $('timeline').disabled = $('exportWebmBtn').disabled = false;
+  if ($('renderPyMp4Btn')) $('renderPyMp4Btn').disabled = false;
+  if ($('generateAnnoBtn')) $('generateAnnoBtn').disabled = false;
+}
+// ---------- LOAD SCENE ----------
+$('sceneSel').addEventListener('change', e => loadScene(+e.target.value));
+$('prevBtn').addEventListener('click', () => loadScene(S.idx - 1));
+$('nextBtn').addEventListener('click', () => loadScene(S.idx + 1));
+function loadScene(i) {
+  if (i < 0 || i >= S.scenes.length) return;
+  pause(); S.idx = i; S.sel = 0; S.time = 0;
+  $('sceneSel').value = i;
+  const sc = S.scenes[i];
+  const img = new Image();
+  img.onload = () => {
+    S.source = img;
+    const W = img.naturalWidth, H = img.naturalHeight;
+    if (!sc.cfg) {
+      // Auto-generate a default annotation structure if missing
+      sc.cfg = {
+        sceneId: sc.name,
+        canvas: { width: W, height: H },
+        sceneDurationMs: 8000,
+        elements: [
+          {
+            id: "region_1",
+            label: "Zone principale",
+            sequence: 1,
+            narrativeRole: "Élément par défaut",
+            type: "structure",
+            subtitle: S.srtItems[0] ? S.srtItems[0].content : "",
+            region: { x: Math.round(W*0.1), y: Math.round(H*0.1), width: Math.round(W*0.8), height: Math.round(H*0.8) },
+            reveal: { direction: "top_to_bottom", startMs: 300, durationMs: 4000, maskPaddingPx: 22, protectedRegions: [] },
+            handPath: {}
+          }
+        ]
+      };
+      syncHandPath(sc.cfg.elements[0]);
+    }
+    if (!sc.cfg.canvas || !sc.cfg.canvas.width) sc.cfg.canvas = { width: W, height: H };
+    if (!Array.isArray(sc.cfg.elements)) sc.cfg.elements = [];
+    S.cfg = sc.cfg; S.cfgHandle = sc.cfgHandle;
+    samplePaper();
+    updateSaveBtns(); syncEditor(); renderList(); renderSubs(); setTime(0);
+  };
+  img.onerror = () => toast('Échec du chargement de l\'image : ' + sc.imgName, true);
+  img.src = sc.imgUrl;
+}
+function samplePaper() {
+  try {
+    const t = document.createElement('canvas'); t.width = S.source.naturalWidth; t.height = S.source.naturalHeight;
+    const tc = t.getContext('2d'); tc.drawImage(S.source, 0, 0);
+    const w = t.width, h = t.height, pts = [[2,2],[w-3,2],[2,h-3],[w-3,h-3]];
+    let r=0,g=0,b=0; pts.forEach(([x,y]) => { const d = tc.getImageData(x,y,1,1).data; r+=d[0]; g+=d[1]; b+=d[2]; });
+    S.paper = `rgb(${Math.round(r/4)},${Math.round(g/4)},${Math.round(b/4)})`; canvas.style.background = S.paper;
+  } catch (e) { S.paper = '#fdf0d0'; }
+}
+// ---------- KIVG PNG STROKE EXTRACTION & HANDWRITING ENGINE ----------
+function kivgGrayscale(imgData) {
+  const { data, width, height } = imgData;
+  const gray = new Uint8Array(width * height);
+  for (let i = 0; i < data.length; i += 4) {
+    gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+  }
+  return gray;
+}
+function kivgAdaptiveThreshold(gray, width, height, blockSize = 15, C = 2) {
+  const output = new Uint8Array(width * height);
+  const offset = Math.floor(blockSize / 2);
+  const integral = new Uint32Array((width + 1) * (height + 1));
+  for (let y = 0; y < height; y++) {
+    let rowSum = 0;
+    for (let x = 0; x < width; x++) {
+      rowSum += gray[y * width + x];
+      integral[(y + 1) * (width + 1) + (x + 1)] = integral[y * (width + 1) + (x + 1)] + rowSum;
+    }
+  }
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const x1 = Math.max(0, x - offset), y1 = Math.max(0, y - offset);
+      const x2 = Math.min(width - 1, x + offset), y2 = Math.min(height - 1, y + offset);
+      const count = (x2 - x1 + 1) * (y2 - y1 + 1);
+      const sum = integral[(y2 + 1) * (width + 1) + (x2 + 1)] - integral[y1 * (width + 1) + (x2 + 1)] - integral[(y2 + 1) * (width + 1) + x1] + integral[y1 * (width + 1) + x1];
+      const mean = sum / count;
+      output[y * width + x] = gray[y * width + x] < (mean - C) ? 255 : 0;
+    }
+  }
+  return output;
+}
+function kivgThinning(binary, width, height) {
+  let dst = new Uint8Array(binary);
+  let changed = true;
+  const toRemove = new Int32Array(width * height);
+  while (changed) {
+    changed = false;
+    let removeCount = 0;
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        if (dst[idx] === 0) continue;
+        const p2 = dst[(y - 1) * width + x] > 0 ? 1 : 0;
+        const p3 = dst[(y - 1) * width + x + 1] > 0 ? 1 : 0;
+        const p4 = dst[y * width + x + 1] > 0 ? 1 : 0;
+        const p5 = dst[(y + 1) * width + x + 1] > 0 ? 1 : 0;
+        const p6 = dst[(y + 1) * width + x] > 0 ? 1 : 0;
+        const p7 = dst[(y + 1) * width + x - 1] > 0 ? 1 : 0;
+        const p8 = dst[y * width + x - 1] > 0 ? 1 : 0;
+        const p9 = dst[(y - 1) * width + x - 1] > 0 ? 1 : 0;
+        const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+        if (B < 2 || B > 6) continue;
+        const A = (p2 === 0 && p3 === 1 ? 1 : 0) + (p3 === 0 && p4 === 1 ? 1 : 0) + (p4 === 0 && p5 === 1 ? 1 : 0) + (p5 === 0 && p6 === 1 ? 1 : 0) + (p6 === 0 && p7 === 1 ? 1 : 0) + (p7 === 0 && p8 === 1 ? 1 : 0) + (p8 === 0 && p9 === 1 ? 1 : 0) + (p9 === 0 && p2 === 1 ? 1 : 0);
+        if (A === 1 && (p2 * p4 * p6 === 0) && (p4 * p6 * p8 === 0)) {
+          toRemove[removeCount++] = idx;
+          changed = true;
+        }
+      }
+    }
+    for (let i = 0; i < removeCount; i++) dst[toRemove[i]] = 0;
+    removeCount = 0;
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const idx = y * width + x;
+        if (dst[idx] === 0) continue;
+        const p2 = dst[(y - 1) * width + x] > 0 ? 1 : 0;
+        const p3 = dst[(y - 1) * width + x + 1] > 0 ? 1 : 0;
+        const p4 = dst[y * width + x + 1] > 0 ? 1 : 0;
+        const p5 = dst[(y + 1) * width + x + 1] > 0 ? 1 : 0;
+        const p6 = dst[(y + 1) * width + x] > 0 ? 1 : 0;
+        const p7 = dst[(y + 1) * width + x - 1] > 0 ? 1 : 0;
+        const p8 = dst[y * width + x - 1] > 0 ? 1 : 0;
+        const p9 = dst[(y - 1) * width + x - 1] > 0 ? 1 : 0;
+        const B = p2 + p3 + p4 + p5 + p6 + p7 + p8 + p9;
+        if (B < 2 || B > 6) continue;
+        const A = (p2 === 0 && p3 === 1 ? 1 : 0) + (p3 === 0 && p4 === 1 ? 1 : 0) + (p4 === 0 && p5 === 1 ? 1 : 0) + (p5 === 0 && p6 === 1 ? 1 : 0) + (p6 === 0 && p7 === 1 ? 1 : 0) + (p7 === 0 && p8 === 1 ? 1 : 0) + (p8 === 0 && p9 === 1 ? 1 : 0) + (p9 === 0 && p2 === 1 ? 1 : 0);
+        if (A === 1 && (p2 * p4 * p8 === 0) && (p2 * p6 * p8 === 0)) {
+          toRemove[removeCount++] = idx;
+          changed = true;
+        }
+      }
+    }
+    for (let i = 0; i < removeCount; i++) dst[toRemove[i]] = 0;
+  }
+  return dst;
+}
+function kivgTraceSkeleton(data, width, height) {
+  const visited = new Uint8Array(data.length);
+  const paths = [];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      if (data[idx] > 0 && !visited[idx]) {
+        const path = [];
+        let currX = x, currY = y;
+        while (true) {
+          const currIdx = currY * width + currX;
+          visited[currIdx] = 1;
+          path.push({ x: currX, y: currY });
+          let found = false;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const nx = currX + dx, ny = currY + dy;
+              if (nx >= 0 && nx < width && ny >= 0 && ny < height) {
+                const nIdx = ny * width + nx;
+                if (data[nIdx] > 0 && !visited[nIdx]) {
+                  currX = nx; currY = ny; found = true; break;
+                }
+              }
+            }
+            if (found) break;
+          }
+          if (!found) break;
+        }
+        if (path.length > 1) paths.push(path);
+      }
+    }
+  }
+  return paths;
+}
+function kivgSmoothPath(path) {
+  if (path.length < 3) return path;
+  const smoothed = [path[0]];
+  for (let i = 1; i < path.length - 1; i++) {
+    smoothed.push({
+      x: (path[i - 1].x + 2 * path[i].x + path[i + 1].x) / 4,
+      y: (path[i - 1].y + 2 * path[i].y + path[i + 1].y) / 4
+    });
+  }
+  smoothed.push(path[path.length - 1]);
+  return smoothed;
+}
+const strokeCache = new WeakMap();
+function getRegionPngStrokes(e) {
+  if (!S.source) return null;
+  // Fingerprint: invalidate cache if region box changed (user moved/resized)
+  const r = e.region;
+  const fp = `${Math.floor(r.x)},${Math.floor(r.y)},${Math.ceil(r.width)},${Math.ceil(r.height)}`;
+  let cache = strokeCache.get(e);
+  if (cache && cache.fp === fp) return cache;
+  try {
+    const sw = S.source.naturalWidth, sh = S.source.naturalHeight;
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = sw; tempCanvas.height = sh;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(S.source, 0, 0);
+    const rx = Math.max(0, Math.floor(r.x)), ry = Math.max(0, Math.floor(r.y));
+    const rw = Math.min(sw - rx, Math.ceil(r.width));
+    const rh = Math.min(sh - ry, Math.ceil(r.height));
+    if (rw <= 0 || rh <= 0) return null;
+    const imgData = tempCtx.getImageData(rx, ry, rw, rh);
+    const gray = kivgGrayscale(imgData);
+    // binary: 255 = dark ink pixel — matches Python: ink_pixels = thresh_map < ink_threshold
+    const binary = kivgAdaptiveThreshold(gray, rw, rh, 15, 2);
+    const skeleton = kivgThinning(binary, rw, rh);
+    const rawPaths = kivgTraceSkeleton(skeleton, rw, rh);
+    const inkMask = new Uint8Array(rw * rh);
+    for (let i = 0; i < binary.length; i++) {
+      inkMask[i] = binary[i] === 255 ? 1 : 0; // 1=ink dark pixel, 0=white background
+    }
+    const srcPixels = new Uint8ClampedArray(imgData.data);
+    const globalPoints = [];
+    rawPaths.forEach(path => {
+      kivgSmoothPath(path).forEach(pt => {
+        globalPoints.push([rx + pt.x, ry + pt.y]);
+      });
+    });
+    const res = { fp, points: globalPoints, inkMask, srcPixels, rx, ry, rw, rh };
+    strokeCache.set(e, res);
+    return res;
+  } catch (err) {
+    return null;
+  }
+}
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+}
+function wobble(a, s) {
+  const env = Math.sin(a * Math.PI);
+  return (Math.sin(a * Math.PI * 2 * 3 + s) * 1.8 + Math.sin(a * Math.PI * 2 * 7.3 + s * 1.7) * 0.7) * env;
+}
+// ---------- REVEAL & DRAWING RENDER ----------
+const getProgress = (t, e) => clamp((t - e.reveal.startMs) / e.reveal.durationMs, 0, 1);
+function lerpPoint(p1, p2, t) {
+  return [
+    p1[0] + (p2[0] - p1[0]) * t,
+    p1[1] + (p2[1] - p1[1]) * t
+  ];
+}
+function drawWavyMask(ctx, e, p) {
+  const r = e.region;
+  const d = e.reveal.direction;
+  const easeP = -(Math.cos(Math.PI * p) - 1) / 2;
+  ctx.save();
+  ctx.beginPath();
+  if (d === 'left_to_right') {
+    const sweepX = r.x + r.width * easeP;
+    const waveAmp = Math.min(20, r.height * 0.12);
+    ctx.moveTo(r.x, r.y);
+    const steps = 30;
+    for (let i = 0; i <= steps; i++) {
+      const curY = r.y + (r.height * i) / steps;
+      const wave = Math.sin((curY / 25) + p * 8) * waveAmp + Math.sin((curY / 10) + 1.5) * (waveAmp * 0.4);
+      ctx.lineTo(sweepX + wave, curY);
+    }
+    ctx.lineTo(r.x, r.y + r.height);
+    ctx.lineTo(r.x, r.y);
+  } else if (d === 'right_to_left') {
+    const sweepX = r.x + r.width * (1 - easeP);
+    const waveAmp = Math.min(20, r.height * 0.12);
+    ctx.moveTo(r.x + r.width, r.y);
+    const steps = 30;
+    for (let i = 0; i <= steps; i++) {
+      const curY = r.y + (r.height * i) / steps;
+      const wave = Math.sin((curY / 25) + p * 8) * waveAmp + Math.sin((curY / 10) + 1.5) * (waveAmp * 0.4);
+      ctx.lineTo(sweepX - wave, curY);
+    }
+    ctx.lineTo(r.x + r.width, r.y + r.height);
+    ctx.lineTo(r.x + r.width, r.y);
+  } else if (d === 'top_to_bottom') {
+    const sweepY = r.y + r.height * easeP;
+    const waveAmp = Math.min(20, r.width * 0.12);
+    ctx.moveTo(r.x, r.y);
+    const steps = 30;
+    for (let i = 0; i <= steps; i++) {
+      const curX = r.x + (r.width * i) / steps;
+      const wave = Math.sin((curX / 25) + p * 8) * waveAmp + Math.sin((curX / 10) + 1.5) * (waveAmp * 0.4);
+      ctx.lineTo(curX, sweepY + wave);
+    }
+    ctx.lineTo(r.x + r.width, r.y);
+    ctx.lineTo(r.x, r.y);
+  } else { // bottom_to_top
+    const sweepY = r.y + r.height * (1 - easeP);
+    const waveAmp = Math.min(20, r.width * 0.12);
+    ctx.moveTo(r.x, r.y + r.height);
+    const steps = 30;
+    for (let i = 0; i <= steps; i++) {
+      const curX = r.x + (r.width * i) / steps;
+      const wave = Math.sin((curX / 25) + p * 8) * waveAmp + Math.sin((curX / 10) + 1.5) * (waveAmp * 0.4);
+      ctx.lineTo(curX, sweepY - wave);
+    }
+    ctx.lineTo(r.x + r.width, r.y + r.height);
+    ctx.lineTo(r.x, r.y + r.height);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+function tipPos(e, p) {
+  const strokeData = getRegionPngStrokes(e);
+  const points = strokeData ? strokeData.points : null;
+  const INK_RATIO = 0.70;
+  if (points && points.length > 1) {
+    const lastInkPt = points[points.length - 1];
+    if (p <= INK_RATIO) {
+      // Phase 1: Follow exact PNG ink stroke paths
+      const inkP = p / INK_RATIO;
+      const idx = Math.min(points.length - 1, Math.floor(inkP * points.length));
+      return points[idx];
+    } else {
+      // Phase 2: Painter brush 3-pass zigzag sweep along the organic wave front
+      const colorP = (p - INK_RATIO) / (1 - INK_RATIO);
+      const easeP = -(Math.cos(Math.PI * colorP) - 1) / 2;
+      const r = e.region;
+      const d = e.reveal.direction;
+      const PASSES = 3;
+      const passP = (colorP * PASSES) % 1.0;
+      const forward = Math.floor(colorP * PASSES) % 2 === 0;
+      const sweepCross = forward ? passP : (1.0 - passP);
+      let targetX, targetY;
+      if (d === 'left_to_right') {
+        targetX = r.x + r.width * easeP;
+        targetY = r.y + r.height * sweepCross;
+      } else if (d === 'right_to_left') {
+        targetX = r.x + r.width * (1 - easeP);
+        targetY = r.y + r.height * sweepCross;
+      } else if (d === 'top_to_bottom') {
+        targetX = r.x + r.width * sweepCross;
+        targetY = r.y + r.height * easeP;
+      } else { // bottom_to_top
+        targetX = r.x + r.width * sweepCross;
+        targetY = r.y + r.height * (1 - easeP);
+      }
+      const seed = r.x * 0.13 + r.y * 0.27;
+      const w = wobble(colorP, seed);
+      let basePos;
+      if (colorP < 0.20) {
+        basePos = lerpPoint(lastInkPt, [targetX, targetY], colorP / 0.20);
+      } else {
+        basePos = [targetX, targetY];
+      }
+      return (d === 'top_to_bottom' || d === 'bottom_to_top') ? [basePos[0] + w, basePos[1]] : [basePos[0], basePos[1] + w];
+    }
+  }
+  // Fallback if no strokes detected
+  const r = e.region;
+  const hp = e.handPath || {};
+  const s = hp.start || [r.x, r.y];
+  const ed = hp.end || [r.x + r.width, r.y + r.height];
+  const d = e.reveal.direction;
+  const seed = r.x * 0.13 + r.y * 0.27;
+  const w = wobble(p, seed);
+  const x = s[0] + (ed[0] - s[0]) * p;
+  const y = s[1] + (ed[1] - s[1]) * p;
+  return (d === 'top_to_bottom' || d === 'bottom_to_top') ? [x + w, y] : [x, y + w];
+}
+function render() {
+  if (!S.cfg || !S.source) return;
+  const w = S.cfg.canvas.width, h = S.cfg.canvas.height;
+  canvas.width = w; canvas.height = h;
+  ctx.fillStyle = S.paper; ctx.fillRect(0, 0, w, h);
+  const arr = els();
+  const done = arr.length ? Math.max(...arr.map(endMs)) : 0;
+  const showFull = !arr.length || (!S.playing && S.time <= 0) || S.time >= done + 500;
+  if (showFull) {
+    ctx.drawImage(S.source, 0, 0, w, h);
+  } else if (!S.playing) {
+    // ── CONFIG MODE: fast lightweight preview — no heavy pixel pipeline ──
+    // Show source image clipped to each revealed region with a simple directional wipe.
+    // This keeps the editor smooth (drag, resize, field edits) without blocking.
+    const ordered = arr.slice().sort((a, b) => a.reveal.startMs - b.reveal.startMs);
+    ordered.forEach((e, index) => {
+      const p = getProgress(S.time, e); if (!p) return;
+      const r = e.region;
+      const d = e.reveal.direction;
+      // Directional clip: reveal a fraction of the region rectangle
+      ctx.save();
+      // Clip out future elements so they don't bleed through
+      ctx.beginPath();
+      ctx.rect(0, 0, w, h);
+      ordered.slice(index + 1).forEach(later => {
+        const lr = later.region;
+        ctx.rect(lr.x + lr.width, lr.y, -lr.width, lr.height); // reverse winding = subtract
+      });
+      // Don't use evenodd here — just draw source clipped to progress rect
+      ctx.restore();
+      // Compute revealed sub-rect based on direction + progress
+      ctx.save();
+      let clipX = r.x, clipY = r.y, clipW = r.width, clipH = r.height;
+      if (d === 'left_to_right')       clipW = r.width  * p;
+      else if (d === 'right_to_left')  { clipX = r.x + r.width * (1 - p); clipW = r.width * p; }
+      else if (d === 'top_to_bottom')  clipH = r.height * p;
+      else if (d === 'bottom_to_top')  { clipY = r.y + r.height * (1 - p); clipH = r.height * p; }
+      else { clipW = r.width * p; clipH = r.height * p; } // diagonal
+      // Erase future regions
+      ctx.beginPath();
+      ctx.rect(clipX, clipY, clipW, clipH);
+      ordered.slice(index + 1).forEach(later => {
+        const lr = later.region;
+        ctx.rect(lr.x, lr.y, lr.width, lr.height);
+      });
+      (e.reveal.protectedRegions || []).forEach(pr => ctx.rect(pr.x, pr.y, pr.width, pr.height));
+      ctx.clip('evenodd');
+      ctx.drawImage(S.source, 0, 0, w, h);
+      ctx.restore();
+    });
+  } else {
+    let active = null;
+    const ordered = arr.slice().sort((a, b) => a.reveal.startMs - b.reveal.startMs);
+    // ── Persistent render cache (reused every frame, no GC pressure) ──
+    // mkC: reveal mask, alpha itself IS the reveal amount (no black/white pixel bookkeeping).
+    // cmpC: scratch canvas used to composite source × mask via GPU (no getImageData/putImageData
+    // over the full canvas — that per-frame full-canvas pixel loop was the main cost before).
+    // scratchC: small per-element canvas, sized to a single region, for the ink-vs-stroke match.
+    if (!S._rc || S._rc.w !== w || S._rc.h !== h) {
+      const mkC = document.createElement('canvas'); mkC.width = w; mkC.height = h;
+      const mkX = mkC.getContext('2d', { willReadFrequently: true });
+      const cmpC = document.createElement('canvas'); cmpC.width = w; cmpC.height = h;
+      const cmpX = cmpC.getContext('2d');
+      const scratchC = document.createElement('canvas');
+      const scratchX = scratchC.getContext('2d', { willReadFrequently: true });
+      S._rc = { w, h, mkC, mkX, cmpC, cmpX, scratchC, scratchX };
+    }
+    const { mkC, mkX, cmpC, cmpX, scratchC, scratchX } = S._rc;
+    // Fully transparent mask each frame — cheap GPU clear, no pixel loop.
+    mkX.clearRect(0, 0, w, h);
+    ordered.forEach((e, index) => {
+      const p = getProgress(S.time, e);
+      if (p <= 0) return; // not started — nothing to draw or compute
+      if (p >= 1) {
+        // Fast path: a fully-revealed region needs no stroke/wave computation at all,
+        // just its rectangle painted opaque — this is what used to be recomputed every
+        // single frame for every already-finished zone.
+        mkX.save();
+        mkX.fillStyle = 'white';
+        const r = e.region;
+        if (r.polygon && Array.isArray(r.polygon) && r.polygon.length >= 3) {
+          mkX.beginPath();
+          r.polygon.forEach((pt, idx) => {
+            if (idx === 0) mkX.moveTo(pt[0], pt[1]);
+            else mkX.lineTo(pt[0], pt[1]);
+          });
+          mkX.closePath();
+          mkX.fill();
+        } else {
+          mkX.fillRect(r.x, r.y, r.width, r.height);
+        }
+        mkX.restore();
+      } else {
+        active = [e, p];
+        const strokeData = getRegionPngStrokes(e);
+        const points = strokeData ? strokeData.points : null;
+        const INK_RATIO = 0.70;
+        if (points && points.length > 1) {
+          const inkP = Math.min(1, p / INK_RATIO);
+          const maxIdx = Math.max(1, Math.floor(inkP * points.length));
+          const strokeW = Math.max(18, Math.min(e.region.width, e.region.height) * 0.16);
+          if (strokeData.inkMask) {
+            const { inkMask, rx, ry, rw, rh } = strokeData;
+            // Paint the stroke-so-far into a small region-sized scratch canvas only
+            // (never the full canvas), then AND it against the real ink pixels.
+            scratchC.width = rw; scratchC.height = rh;
+            scratchX.clearRect(0, 0, rw, rh);
+            scratchX.save();
+            scratchX.strokeStyle = 'white';
+            scratchX.lineWidth = strokeW;
+            scratchX.lineCap = 'round';
+            scratchX.lineJoin = 'round';
+            scratchX.beginPath();
+            scratchX.moveTo(points[0][0] - rx, points[0][1] - ry);
+            for (let i = 1; i < maxIdx; i++) scratchX.lineTo(points[i][0] - rx, points[i][1] - ry);
+            scratchX.stroke();
+            scratchX.restore();
+            const strokeCover = scratchX.getImageData(0, 0, rw, rh);
+            for (let i = 0; i < inkMask.length; i++) {
+              strokeCover.data[i * 4 + 3] = (strokeCover.data[i * 4 + 3] > 0 && inkMask[i] === 1) ? 255 : 0;
+            }
+            scratchX.putImageData(strokeCover, 0, 0);
+            mkX.drawImage(scratchC, rx, ry); // composite onto mask, GPU op
+          }
+          // Phase 2: wave sweep — a vector fill straight onto the mask, no pixel readback needed.
+          if (p > INK_RATIO) {
+            const colorP = (p - INK_RATIO) / (1 - INK_RATIO);
+            mkX.save();
+            mkX.fillStyle = 'white';
+            drawWavyMask(mkX, e, colorP);
+            mkX.restore();
+          }
+        } else {
+          mkX.save();
+          mkX.fillStyle = 'white';
+          drawWavyMask(mkX, e, p);
+          mkX.restore();
+        }
+      }
+      // Clip out everything that starts later so it can never bleed through this
+      // element's mask, regardless of whether that later element has started yet.
+      mkX.save();
+      mkX.globalCompositeOperation = 'destination-out';
+      mkX.fillStyle = 'white';
+      ordered.slice(index + 1).forEach(later => {
+        const lr = later.region;
+        mkX.fillRect(lr.x, lr.y, lr.width, lr.height);
+      });
+      if (p < 1) (e.reveal.protectedRegions || []).forEach(pr => mkX.fillRect(pr.x, pr.y, pr.width, pr.height));
+      mkX.restore();
+    });
+    // Compose: draw the source image once, then clip it to the mask's alpha via
+    // GPU compositing — replaces the old full-canvas getImageData/putImageData pass.
+    cmpX.clearRect(0, 0, w, h);
+    cmpX.drawImage(S.source, 0, 0, w, h);
+    cmpX.globalCompositeOperation = 'destination-in';
+    cmpX.drawImage(mkC, 0, 0);
+    cmpX.globalCompositeOperation = 'source-over';
+    ctx.drawImage(cmpC, 0, 0);
+    // Draw hand overlay with smooth exit animation
+    if (active && hand.complete && hand.naturalWidth) {
+      const [e, p] = active;
+      const [tx, ty] = tipPos(e, p);
+      const s = w / 1672 * 0.42;
+      let handAlpha = 1.0;
+      let offsetY = 0;
+      if (p > 0.92) {
+        const exitT = (p - 0.92) / 0.08;
+        handAlpha = 1.0 - exitT;
+        offsetY = exitT * 70 * s; // Smooth drop off-screen
+      }
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, handAlpha);
+      ctx.drawImage(hand, tx - 115 * s, ty - 77 * s + offsetY, hand.width * s, hand.height * s);
+      ctx.restore();
+    }
+  }
+  // Active Drawing new box indicator
+  if (S.mode === 'draw' && S.newBoxStart) {
+    ctx.save();
+    ctx.strokeStyle = '#10b981';
+    ctx.lineWidth = 4;
+    ctx.setLineDash([8, 6]);
+    ctx.strokeRect(S.newBoxStart.x, S.newBoxStart.y, S.newBoxStart.w, S.newBoxStart.h);
+    ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+    ctx.fillRect(S.newBoxStart.x, S.newBoxStart.y, S.newBoxStart.w, S.newBoxStart.h);
+    ctx.restore();
+  }
+  if (S.showOverlay && arr.length) drawOverlay();
+}
+$('overlayToggle').addEventListener('change', e => { S.showOverlay = e.target.checked; render(); });
+function makeHexagonPoints(r) {
+  const cx = r.x + r.width / 2, cy = r.y + r.height / 2;
+  const rx = r.width / 2, ry = r.height / 2;
+  return [
+    [Math.round(cx + rx * 0.5), Math.round(cy - ry)],
+    [Math.round(cx + rx), Math.round(cy)],
+    [Math.round(cx + rx * 0.5), Math.round(cy + ry)],
+    [Math.round(cx - rx * 0.5), Math.round(cy + ry)],
+    [Math.round(cx - rx), Math.round(cy)],
+    [Math.round(cx - rx * 0.5), Math.round(cy - ry)]
+  ];
+}
+function handlesOf(r) {
+  if (r.polygon && Array.isArray(r.polygon) && r.polygon.length >= 3) {
+    const res = {};
+    r.polygon.forEach((pt, idx) => { res[`poly_${idx}`] = pt; });
+    return res;
+  }
+  return {
+    tl:[r.x,r.y], t:[r.x+r.width/2,r.y], tr:[r.x+r.width,r.y], r:[r.x+r.width,r.y+r.height/2],
+    br:[r.x+r.width,r.y+r.height], b:[r.x+r.width/2,r.y+r.height], bl:[r.x,r.y+r.height], l:[r.x,r.y+r.height/2]
+  };
+}
+function drawOverlay() {
+  els().forEach((e, i) => {
+    const r = e.region, focus = i === S.sel;
+    const typeColor = TYPE_COLORS[e.type] || '#f5a623';
+    const isPoly = r.polygon && Array.isArray(r.polygon) && r.polygon.length >= 3;
+    ctx.save();
+    ctx.strokeStyle = focus ? '#3b82f6' : typeColor;
+    ctx.fillStyle = focus ? 'rgba(59,130,246,.15)' : hexToRgba(typeColor, 0.08);
+    ctx.lineWidth = focus ? 4 : 2; ctx.setLineDash(focus ? [] : [8, 6]);
+
+    if (isPoly) {
+      ctx.beginPath();
+      r.polygon.forEach((pt, idx) => {
+        if (idx === 0) ctx.moveTo(pt[0], pt[1]);
+        else ctx.lineTo(pt[0], pt[1]);
+      });
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else {
+      ctx.fillRect(r.x, r.y, r.width, r.height); ctx.strokeRect(r.x, r.y, r.width, r.height); ctx.setLineDash([]);
+    }
+
+    const badgeX = isPoly ? r.polygon[0][0] : r.x + 18;
+    const badgeY = isPoly ? r.polygon[0][1] : r.y + 18;
+    ctx.fillStyle = focus ? '#3b82f6' : typeColor;
+    ctx.beginPath(); ctx.arc(badgeX, badgeY, 14, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 15px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(i+1, badgeX, badgeY);
+
+    const labelText = e.detectedText || e.textContent || e.label || '';
+    if (labelText) {
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = typeColor;
+      const tagY = r.y + r.height + 14;
+      const tagText = (e.type === 'text' ? '🔤 ' : '') + labelText.slice(0, 40);
+      const metrics = ctx.measureText(tagText);
+      ctx.fillStyle = 'rgba(15,17,21,0.85)';
+      ctx.fillRect(r.x, tagY - 12, metrics.width + 8, 16);
+      ctx.fillStyle = typeColor;
+      ctx.fillText(tagText, r.x + 4, tagY);
+    }
+    if (focus) {
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3b82f6'; ctx.lineWidth = 3;
+      Object.values(handlesOf(r)).forEach(([x, y]) => { ctx.fillRect(x-8, y-8, 16, 16); ctx.strokeRect(x-8, y-8, 16, 16); });
+    }
+    ctx.restore();
+  });
+}
+function hexToRgba(hex, alpha) {
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16), g = parseInt(h.substring(2, 4), 16), b = parseInt(h.substring(4, 6), 16);
+  return `rgba(${r},${g},${b},${alpha})`;
+}
+// ---------- MODE SWITCHING ----------
+$('modeSelectBtn').addEventListener('click', () => setMode('select'));
+$('modeDrawBtn').addEventListener('click', () => setMode('draw'));
+function setMode(mode) {
+  S.mode = mode;
+  $('modeSelectBtn').className = mode === 'select' ? 'active' : '';
+  $('modeDrawBtn').className = mode === 'draw' ? 'active' : '';
+  canvas.className = mode === 'draw' ? 'drawing-mode' : '';
+  toast(`Mode : ${mode === 'select' ? 'Sélection & Déplacement' : 'Dessin de zone'}`);
+}
+// ---------- LIST & EDITING ----------
+function selectElem(i) { S.sel = i; syncEditor(); renderList(); renderSubs(); render(); }
+function renderList() {
+  const arr = els();
+  $('elemCount').textContent = `(${arr.length})`;
+  $('elist').innerHTML = arr.map((e, i) => {
+    const type = e.type || 'structure';
+    const swatch = e.colorAccentHex ? `<span class="swatch" style="background:${e.colorAccentHex}" title="Accent couleur"></span>` : '';
+    const displayName = e.detectedText || e.label || '';
+    const styleTag = e.reveal.style ? `<span class="text-[9px] text-purple-300 bg-purple-900/50 px-1 py-0.5 rounded uppercase tracking-wide shrink-0" title="Style de reveal">${e.reveal.style}</span>` : '';
+    return `<li draggable="true" data-i="${i}" class="${i===S.sel?'sel':''}"><span class="grip">⋮⋮</span><span class="o">#${i+1}</span><span class="badge ${type}">${type}</span><span class="t">${(e.reveal.startMs/1000).toFixed(1)}s</span><span class="nm">${escapeHtml(displayName)}</span>${styleTag}${swatch}</li>`;
+  }).join('');
+  $('elist').querySelectorAll('li').forEach(li => {
+    const i = +li.dataset.i;
+    li.addEventListener('click', () => selectElem(i));
+    li.addEventListener('dragstart', ev => { S.dragRow = i; li.classList.add('dragging'); ev.dataTransfer.effectAllowed = 'move'; });
+    li.addEventListener('dragend', () => { li.classList.remove('dragging'); $('elist').querySelectorAll('li').forEach(x => x.classList.remove('over')); });
+    li.addEventListener('dragover', ev => { ev.preventDefault(); li.classList.add('over'); });
+    li.addEventListener('dragleave', () => li.classList.remove('over'));
+    li.addEventListener('drop', ev => { ev.preventDefault(); reorder(S.dragRow, i); });
+  });
+}
+function reorder(from, to) {
+  const arr = els(); if (from < 0 || to < 0 || from === to) return;
+  const [m] = arr.splice(from, 1); arr.splice(to, 0, m);
+  arr.forEach((e, i) => e.sequence = i + 1);
+  S.sel = to; markDirty(); syncEditor(); renderList(); renderSubs(); render();
+}
+function renderSubs() {
+  const arr = els();
+  $('sublist').innerHTML = arr.map((e, i) => {
+    const txt = (e.subtitle || '').trim();
+    return `<li data-i="${i}" class="${i===S.sel?'sel':''} ${txt?'':'empty'}"><span class="o">#${i+1}</span><span class="s">${txt ? escapeHtml(txt) : ' (Aucun sous-titre)'}</span></li>`;
+  }).join('');
+  $('sublist').querySelectorAll('li').forEach(li => li.addEventListener('click', () => selectElem(+li.dataset.i)));
+}
+const F = ['f_label','f_type','f_x','f_y','f_w','f_h','f_dir','f_style','f_slideFrom','f_start','f_end','f_dur','f_textContent'];
+function syncEditor() {
+  const e = els()[S.sel], on = !!e;
+  F.forEach(id => $(id).disabled = !on); $('f_sub').disabled = !on; $('delBtn').disabled = !on;
+  $('f_colorAccent').disabled = !on; $('f_colorAccentClear').disabled = !on;
+  $('f_shapeRect').disabled = !on; $('f_shapeHex').disabled = !on;
+  const quickBtns = ['quickSubAlignBtn', 'quickDurSetBtn', 'durMinusBtn', 'durPlusBtn', 'durSpeed2x', 'durSpeedHalf'];
+  quickBtns.forEach(id => { if ($(id)) $(id).disabled = !S.cfg || !els().length; });
+  if (!on) { F.forEach(id => $(id).value = ''); $('f_sub').value = ''; $('f_detectedText').value = ''; $('f_colorAccent').value = '#f5a623'; toggleSlideFromVisibility(''); return; }
+  const isPoly = e.region.polygon && Array.isArray(e.region.polygon) && e.region.polygon.length >= 3;
+  $('f_shapeRect').className = `flex-1 text-[11px] py-1 ${!isPoly ? 'bg-blue-600 text-white font-medium' : 'bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342]'} rounded disabled:opacity-50`;
+  $('f_shapeHex').className = `flex-1 text-[11px] py-1 ${isPoly ? 'bg-blue-600 text-white font-medium' : 'bg-[#222630] text-[#e6e8ec] border border-[#363c4a] hover:bg-[#2d3342]'} rounded disabled:opacity-50`;
+  $('f_label').value = e.label || '';
+  $('f_type').value = e.type || 'structure';
+  ['x','y','width','height'].forEach((k, j) => $(['f_x','f_y','f_w','f_h'][j]).value = Math.round(e.region[k]));
+  $('f_dir').value = e.reveal.direction;
+  $('f_style').value = e.reveal.style || '';
+  $('f_slideFrom').value = e.reveal.slideFrom || 'left';
+  toggleSlideFromVisibility(e.reveal.style || '');
+  $('f_start').value = e.reveal.startMs; $('f_dur').value = e.reveal.durationMs; $('f_end').value = endMs(e);
+  $('f_sub').value = e.subtitle || '';
+  // detectedText = lecture seule (extrait de l'image par vision, jamais reecrit ici)
+  $('f_detectedText').value = e.detectedText || '';
+  // textContent = legende synthetique editable (bakee a la main cote Python)
+  $('f_textContent').value = e.textContent || '';
+  $('f_colorAccent').value = e.colorAccentHex || '#f5a623';
+}
+function toggleSlideFromVisibility(style) {
+  const show = style === 'slide' || style === 'bounce';
+  $('f_slideFromLabel').style.display = show ? '' : 'none';
+  $('f_slideFrom').style.display = show ? '' : 'none';
+}
+$('f_style').addEventListener('change', () => toggleSlideFromVisibility($('f_style').value));
+function syncHandPath(e) {
+  const r = e.region, d = e.reveal.direction; e.handPath = e.handPath || {};
+  e.handPath.start = [r.x + r.width/2, r.y + r.height/2];
+  e.handPath.end = d === 'left_to_right' ? [r.x+r.width, r.y+r.height/2]
+    : d === 'right_to_left' ? [r.x, r.y+r.height/2]
+    : d === 'bottom_to_top' ? [r.x+r.width/2, r.y] : [r.x+r.width/2, r.y+r.height];
+  e.handPath.easing = e.handPath.easing || 'easeInOut';
+}
+function applyEditor(evt) {
+  const e = els()[S.sel]; if (!e) return;
+  const targetId = evt && evt.target ? evt.target.id : null;
+  e.label = $('f_label').value || e.label;
+  e.type = $('f_type').value || e.type || 'structure';
+  e.region.x = Math.max(0, Math.round(+$('f_x').value || 0));
+  e.region.y = Math.max(0, Math.round(+$('f_y').value || 0));
+  e.region.width = Math.max(1, Math.round(+$('f_w').value || 1));
+  e.region.height = Math.max(1, Math.round(+$('f_h').value || 1));
+  e.reveal.direction = $('f_dir').value;
+  const styleVal = $('f_style').value;
+  if (styleVal) e.reveal.style = styleVal; else delete e.reveal.style;
+  if (styleVal === 'slide' || styleVal === 'bounce') e.reveal.slideFrom = $('f_slideFrom').value;
+  else delete e.reveal.slideFrom;
+  let start = Math.max(0, Math.round(+$('f_start').value || 0));
+  let dur = Math.max(100, Math.round(+$('f_dur').value || 1000));
+  let end = Math.max(start + 100, Math.round(+$('f_end').value || (start + dur)));
+  if (targetId === 'f_dur') {
+    end = start + dur;
+  } else if (targetId === 'f_end') {
+    dur = Math.max(100, end - start);
+  } else if (targetId === 'f_start') {
+    end = start + dur;
+  }
+  e.reveal.startMs = start;
+  e.reveal.durationMs = dur;
+  $('f_start').value = start;
+  $('f_dur').value = dur;
+  $('f_end').value = start + dur;
+  // Legende manuscrite : chaine vide -> on retire le champ plutot que de garder ""
+  const textContentVal = $('f_textContent').value;
+  if (textContentVal && textContentVal.trim()) e.textContent = textContentVal;
+  else delete e.textContent;
+  syncHandPath(e);
+  markDirty(); renderList(); renderSubs(); setTime(Math.min(S.time, totalMs())); render();
+}
+F.forEach(id => { $(id).addEventListener('input', applyEditor); $(id).addEventListener('change', applyEditor); });
+$('f_colorAccent').addEventListener('input', () => {
+  const e = els()[S.sel]; if (!e) return;
+  e.colorAccentHex = $('f_colorAccent').value;
+  markDirty(); renderList(); render();
+});
+$('f_colorAccentClear').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  delete e.colorAccentHex;
+  $('f_colorAccent').value = '#f5a623';
+  markDirty(); renderList(); render();
+});
+// ---------- QUICK DURATION CONTROLS ----------
+$('quickSubAlignBtn').addEventListener('click', () => {
+  const arr = els();
+  if (!arr.length) return;
+  if (!S.srtItems.length) { toast('Veuillez d\'abord charger un fichier de sous-titres SRT !', true); return; }
+  arr.forEach((e, i) => {
+    if (S.srtItems[i]) {
+      e.reveal.startMs = S.srtItems[i].startMs;
+      e.reveal.durationMs = Math.max(300, S.srtItems[i].endMs - S.srtItems[i].startMs);
+      e.subtitle = S.srtItems[i].content;
+    }
+  });
+  markDirty(); syncEditor(); renderList(); renderSubs(); render();
+  toast('⏱ Durées de dessin synchronisées avec les sous-titres SRT !');
+});
+$('quickDurSetBtn').addEventListener('click', () => {
+  const val = prompt("Entrez la durée de dessin (ms) à appliquer à TOUTES les zones :", "2500");
+  if (val === null) return;
+  const newDur = Math.max(100, parseInt(val, 10) || 2000);
+  let currStart = 300;
+  els().forEach(e => {
+    e.reveal.startMs = currStart;
+    e.reveal.durationMs = newDur;
+    currStart += newDur + 200;
+  });
+  markDirty(); syncEditor(); renderList(); renderSubs(); render();
+  toast(`⚡ Durée de ${newDur}ms appliquée à toutes les zones !`);
+});
+$('durMinusBtn').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  e.reveal.durationMs = Math.max(100, e.reveal.durationMs - 500);
+  markDirty(); syncEditor(); renderList(); render();
+});
+$('durPlusBtn').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  e.reveal.durationMs += 500;
+  markDirty(); syncEditor(); renderList(); render();
+});
+$('durSpeed2x').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  e.reveal.durationMs = Math.max(100, Math.round(e.reveal.durationMs / 2));
+  markDirty(); syncEditor(); renderList(); render();
+});
+$('durSpeedHalf').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  e.reveal.durationMs = Math.round(e.reveal.durationMs * 2);
+  markDirty(); syncEditor(); renderList(); render();
+});
+$('f_sub').addEventListener('input', () => { const e = els()[S.sel]; if (!e) return; e.subtitle = $('f_sub').value; markDirty(); renderSubs(); });
+$('addBtn').addEventListener('click', () => {
+  if (!S.cfg) return;
+  const arr = els(), W = S.cfg.canvas.width, H = S.cfg.canvas.height;
+  const seq = arr.length + 1;
+  const lastEnd = arr.length ? Math.max(...arr.map(endMs)) : 300;
+  const e = {
+    id: `region_${seq}`, label: `Zone ${seq}`, sequence: seq, narrativeRole: 'Nouvel élément', type: 'structure',
+    subtitle: S.srtItems[seq-1] ? S.srtItems[seq-1].content : '',
+    region: { x: Math.round(W*0.1), y: Math.round(H*0.1), width: Math.round(W*0.3), height: Math.round(H*0.3) },
+    reveal: { direction: 'top_to_bottom', startMs: lastEnd + 200, durationMs: 2000, maskPaddingPx: 22, protectedRegions: [] },
+    handPath: {}
+  };
+  syncHandPath(e); arr.push(e); S.sel = arr.length - 1; markDirty(); syncEditor(); renderList(); renderSubs(); render();
+});
+$('delBtn').addEventListener('click', () => {
+  const arr = els(); if (S.sel < 0 || S.sel >= arr.length) return;
+  arr.splice(S.sel, 1); arr.forEach((e, i) => e.sequence = i + 1);
+  S.sel = Math.max(0, S.sel - 1); markDirty(); syncEditor(); renderList(); renderSubs(); render();
+});
+$('f_shapeRect').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  delete e.region.polygon;
+  markDirty(); syncEditor(); render();
+});
+$('f_shapeHex').addEventListener('click', () => {
+  const e = els()[S.sel]; if (!e) return;
+  e.region.polygon = makeHexagonPoints(e.region);
+  markDirty(); syncEditor(); render();
+});
+// ---------- CANVAS INTERACTIONS ----------
+function canvasPoint(evt) { const b = canvas.getBoundingClientRect(); return { x: (evt.clientX-b.left) * canvas.width/b.width, y: (evt.clientY-b.top) * canvas.height/b.height }; }
+function handleAt(pt, r) { for (const [name, [x, y]] of Object.entries(handlesOf(r))) if (Math.abs(pt.x-x) <= 16 && Math.abs(pt.y-y) <= 16) return name; return null; }
+canvas.addEventListener('pointerdown', evt => {
+  const p = canvasPoint(evt);
+  if (S.mode === 'draw') {
+    S.drag = { mode: 'draw', startX: p.x, startY: p.y };
+    S.newBoxStart = { x: p.x, y: p.y, w: 0, h: 0 };
+    canvas.setPointerCapture(evt.pointerId);
+    return;
+  }
+  const arr = els();
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const r = arr[i].region;
+    const hName = handleAt(p, r);
+    if (hName || (p.x >= r.x-16 && p.x <= r.x+r.width+16 && p.y >= r.y-16 && p.y <= r.y+r.height+16)) {
+      S.sel = i; S.drag = { mode: 'select', handle: hName || 'move', point: p, rect: { ...r }, origPoly: r.polygon ? r.polygon.map(pt => [...pt]) : null };
+      canvas.setPointerCapture(evt.pointerId); syncEditor(); renderList(); renderSubs(); render(); return;
+    }
+  }
+});
+canvas.addEventListener('pointermove', evt => {
+  if (!S.drag) return;
+  const p = canvasPoint(evt);
+  if (S.drag.mode === 'draw') {
+    const x = Math.min(S.drag.startX, p.x);
+    const y = Math.min(S.drag.startY, p.y);
+    const w = Math.abs(p.x - S.drag.startX);
+    const h = Math.abs(p.y - S.drag.startY);
+    S.newBoxStart = { x, y, w, h };
+    render();
+    return;
+  }
+  const r = els()[S.sel].region, base = S.drag.rect, dx = p.x-S.drag.point.x, dy = p.y-S.drag.point.y;
+  const W = S.cfg.canvas.width, H = S.cfg.canvas.height, min = 20, h = S.drag.handle;
+  if (h && h.startsWith('poly_')) {
+    const idx = parseInt(h.replace('poly_', ''), 10);
+    if (r.polygon && r.polygon[idx] && S.drag.origPoly && S.drag.origPoly[idx]) {
+      r.polygon[idx][0] = Math.round(clamp(S.drag.origPoly[idx][0] + dx, 0, W));
+      r.polygon[idx][1] = Math.round(clamp(S.drag.origPoly[idx][1] + dy, 0, H));
+      const xs = r.polygon.map(pt => pt[0]), ys = r.polygon.map(pt => pt[1]);
+      r.x = Math.min(...xs); r.y = Math.min(...ys);
+      r.width = Math.max(1, Math.max(...xs) - r.x);
+      r.height = Math.max(1, Math.max(...ys) - r.y);
+    }
+  } else if (h === 'move') {
+    r.x = clamp(base.x+dx, 0, W-base.width);
+    r.y = clamp(base.y+dy, 0, H-base.height);
+    if (r.polygon && S.drag.origPoly) {
+      const shiftX = r.x - base.x, shiftY = r.y - base.y;
+      r.polygon = S.drag.origPoly.map(pt => [pt[0] + shiftX, pt[1] + shiftY]);
+    }
+  } else {
+    let left = base.x, right = base.x+base.width, top = base.y, bottom = base.y+base.height;
+    if (h.includes('l')) left = clamp(base.x+dx, 0, right-min);
+    if (h.includes('r')) right = clamp(base.x+base.width+dx, left+min, W);
+    if (h.includes('t')) top = clamp(base.y+dy, 0, bottom-min);
+    if (h.includes('b')) bottom = clamp(base.y+base.height+dy, top+min, H);
+    r.x = Math.round(left); r.y = Math.round(top); r.width = Math.round(right-left); r.height = Math.round(bottom-top);
+  }
+  syncHandPath(els()[S.sel]); markDirty(); syncEditor(); render();
+});
+canvas.addEventListener('pointerup', () => {
+  if (S.drag && S.drag.mode === 'draw' && S.newBoxStart) {
+    const { x, y, w, h } = S.newBoxStart;
+    if (w > 15 && h > 15) {
+      const arr = els();
+      const seq = arr.length + 1;
+      const lastEnd = arr.length ? Math.max(...arr.map(endMs)) : 300;
+      const e = {
+        id: `region_${seq}`, label: `Zone ${seq}`, sequence: seq, narrativeRole: 'Nouvelle zone', type: 'structure',
+        subtitle: S.srtItems[seq-1] ? S.srtItems[seq-1].content : '',
+        region: { x: Math.round(x), y: Math.round(y), width: Math.round(w), height: Math.round(h) },
+        reveal: { direction: 'top_to_bottom', startMs: lastEnd + 200, durationMs: 2000, maskPaddingPx: 22, protectedRegions: [] },
+        handPath: {}
+      };
+      syncHandPath(e); arr.push(e); S.sel = arr.length - 1; markDirty(); syncEditor(); renderList(); renderSubs();
+      toast(`Nouvelle zone de dessin ajoutée #${seq}`);
+    }
+    S.newBoxStart = null;
+    setMode('select');
+  }
+  S.drag = null;
+  render();
+});
+// ---------- TIMELINE ----------
+function setTime(v) {
+  const dur = totalMs();
+  S.time = clamp(v, 0, dur);
+  $('timeline').value = dur ? Math.round(S.time/dur*1000) : 0;
+  $('tlabel').textContent = `${(S.time/1000).toFixed(2)}s / ${(dur/1000).toFixed(2)}s`;
+  render();
+}
+$('timeline').addEventListener('input', e => { pause(); setTime((+e.target.value)/1000 * totalMs()); });
+$('playBtn').addEventListener('click', () => S.playing ? pause() : play());
+function play() { if (!S.cfg) return; if (S.time >= totalMs()) S.time = 0; S.playing = true; $('playBtn').textContent = '⏸'; S.last = performance.now(); requestAnimationFrame(tick); }
+function pause() { S.playing = false; $('playBtn').textContent = '▶'; }
+function tick(ts) { if (!S.playing) return; setTime(S.time + (ts - S.last)); S.last = ts; if (S.time >= totalMs()) { pause(); return; } requestAnimationFrame(tick); }
+// ---------- EXPORT WEBM PREVIEW VIDEO ----------
+$('exportWebmBtn').addEventListener('click', exportVideo);
+async function exportVideo() {
+  if (!S.cfg || !S.source) return;
+  toast('Enregistrement de la vidéo de prévisualisation...', false);
+  setTime(0);
+  pause();
+  
+  const stream = canvas.captureStream(30);
+  let recorder;
+  try {
+    recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
+  } catch (e) {
+    try {
+      recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    } catch (e2) {
+      toast('Votre navigateur ne prend pas en charge MediaRecorder video/webm', true);
+      return;
+    }
+  }
+  const chunks = [];
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+  recorder.onstop = () => {
+    const blob = new Blob(chunks, { type: 'video/webm' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${S.scenes[S.idx].name}-preview.webm`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('✅ Vidéo WebM exportée avec succès !');
+  };
+  recorder.start();
+  S.playing = true;
+  S.last = performance.now();
+  const dur = totalMs();
+  const recordTick = (ts) => {
+    if (!S.playing) {
+      recorder.stop();
+      return;
+    }
+    setTime(S.time + (ts - S.last));
+    S.last = ts;
+    if (S.time >= dur) {
+      pause();
+      recorder.stop();
+      return;
+    }
+    requestAnimationFrame(recordTick);
+  };
+  requestAnimationFrame(recordTick);
+}
+// ---------- SAVE CONFIG ----------
+function markDirty() { S.dirty.add(S.idx); $('dirtyFlag').textContent = '● Non enregistré'; updateSaveBtns(); }
+function updateSaveBtns() { $('saveBtn').disabled = !S.dirty.has(S.idx); $('saveAllBtn').disabled = S.dirty.size === 0; }
+$('saveBtn').addEventListener('click', () => saveScene(S.idx));
+$('saveAllBtn').addEventListener('click', async () => { for (const i of [...S.dirty]) await saveScene(i); });
+async function saveScene(i) {
+  const sc = S.scenes[i];
+  if (i === S.idx && sc.cfg.elements && sc.cfg.elements.length) sc.cfg.sceneDurationMs = totalMs();
+  const text = JSON.stringify(sc.cfg, null, 2);
+  try {
+    let handle = sc.cfgHandle;
+    if (!handle && S.dirHandle && S.dirHandle.getFileHandle) handle = await S.dirHandle.getFileHandle(sc.cfgName, { create: true });
+    if (handle && handle.createWritable) {
+      if (handle.requestPermission) { const perm = await handle.requestPermission({ mode: 'readwrite' }); if (perm !== 'granted') throw new Error('Permission d\'écriture non accordée'); }
+      const w = await handle.createWritable(); await w.write(text); await w.close();
+      sc.cfgHandle = handle; sc.hasConfig = true;
+    } else { downloadText(sc.cfgName, text); }
+    S.dirty.delete(i); if (i === S.idx) $('dirtyFlag').textContent = '';
+    updateSaveBtns(); toast(`Fichier JSON enregistré : ${sc.name}`);
+  } catch (e) { downloadText(sc.cfgName, text); toast(`Fichier JSON téléchargé : ${sc.name}`); }
+}
+function downloadText(name, text) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: 'application/json' })); a.download = name; a.click(); URL.revokeObjectURL(a.href); }
+// ---------- KEYBOARD SHORTCUTS ----------
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+  if (e.code === 'Space') { e.preventDefault(); S.playing ? pause() : play(); }
+  else if (e.code === 'ArrowRight') loadScene(S.idx + 1);
+  else if (e.code === 'ArrowLeft') loadScene(S.idx - 1);
+  else if (e.code === 'Delete' && els()[S.sel]) $('delBtn').click();
+});
+window.addEventListener('beforeunload', e => { if (S.dirty.size) { e.preventDefault(); e.returnValue = ''; } });
+let toastTimer;
+function toast(msg, err) { const t = $('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : ''); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.className = 'toast', 2600); }
+</script>
+<!-- Modal Lecteur Vidéo MP4 -->
+<div id="videoModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+  <div class="bg-brand-panel border border-brand-border rounded-xl shadow-2xl max-w-4xl w-full flex flex-col overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-3 border-b border-brand-border bg-brand-dark/50">
+      <h3 class="text-lg font-semibold text-gray-200 flex items-center gap-2">
+        <span>🎬</span> Prévisualisation du rendu MP4 Python
+      </h3>
+      <button onclick="$('videoModal').style.display='none'; $('modalVideoPlayer').pause();" class="text-gray-400 hover:text-white text-xl font-bold px-2.5 py-1 rounded-lg hover:bg-gray-800 transition">✕</button>
+    </div>
+    <div class="p-4 bg-black flex items-center justify-center">
+      <video id="modalVideoPlayer" controls class="max-h-[70vh] w-auto rounded-lg shadow-lg"></video>
+    </div>
+    <div class="flex items-center justify-between px-5 py-3 border-t border-brand-border bg-brand-panel">
+      <span class="text-xs text-gray-400">Rendu généré via <code class="text-brand-gold">render_stream_whiteboard.py</code></span>
+      <div class="flex gap-3">
+        <a id="downloadMp4Link" download class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-medium rounded-lg text-sm transition shadow flex items-center gap-1.5 cursor-pointer">
+          <span>⬇</span> Télécharger la vidéo MP4
+        </a>
+        <button onclick="$('videoModal').style.display='none'; $('modalVideoPlayer').pause();" class="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white font-medium rounded-lg text-sm transition">
+          Fermer
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

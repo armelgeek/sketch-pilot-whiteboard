@@ -1,0 +1,139 @@
+{
+  "sceneId": "scene-premium-bag",
+  "canvas": {
+    "width": 1536,
+    "height": 864
+  },
+  "storyBasis": "Croquis doodle : titre \"Premium Image\", un sac à main façon Birkin avec une étiquette de prix barrée ($1500 -> $700), et un point d'interrogation à droite.",
+  "sceneDurationMs": 9500,
+  "elements": [
+    {
+      "id": "title",
+      "label": "Titre \"Premium Image\"",
+      "sequence": 1,
+      "narrativeRole": "Accroche / titre",
+      "subtitle": "Le titre \"Premium Image\" apparaît, souligné d'un trait à main levée.",
+      "type": "text",
+      "region": {
+        "x": 100,
+        "y": 75,
+        "width": 680,
+        "height": 205
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 300,
+        "durationMs": 1600,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          440,
+          85
+        ],
+        "end": [
+          440,
+          270
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "bag",
+      "label": "Sac à main",
+      "sequence": 2,
+      "narrativeRole": "Sujet principal",
+      "subtitle": "Le sac se dessine au trait, avec ses anses et sa fermeture détaillées.",
+      "type": "object",
+      "region": {
+        "x": 770,
+        "y": 230,
+        "width": 400,
+        "height": 535
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 2000,
+        "durationMs": 3400,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          970,
+          240
+        ],
+        "end": [
+          970,
+          755
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "tag",
+      "label": "Étiquette de prix",
+      "sequence": 3,
+      "narrativeRole": "Détail / accroche prix",
+      "subtitle": "Une étiquette apparaît avec le prix barré 1500$ ramené à 700$.",
+      "type": "prop",
+      "region": {
+        "x": 560,
+        "y": 370,
+        "width": 330,
+        "height": 300
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 5500,
+        "durationMs": 2000,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          725,
+          380
+        ],
+        "end": [
+          725,
+          660
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "question",
+      "label": "Point d'interrogation",
+      "sequence": 4,
+      "narrativeRole": "Suspense / appel à la curiosité",
+      "subtitle": "Un point d'interrogation apparaît à droite, laissant planer le doute.",
+      "type": "symbol",
+      "region": {
+        "x": 1174,
+        "y": 216,
+        "width": 201,
+        "height": 394
+      },
+      "reveal": {
+        "direction": "bottom_to_top",
+        "startMs": 7600,
+        "durationMs": 1400,
+        "maskPaddingPx": 22,
+        "protectedRegions": []
+      },
+      "handPath": {
+        "start": [
+          1274.5,
+          413
+        ],
+        "end": [
+          1274.5,
+          216
+        ],
+        "easing": "easeInOut"
+      }
+    }
+  ]
+}

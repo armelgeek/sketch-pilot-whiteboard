@@ -1,0 +1,22 @@
+{
+  "output": "out/final.mp4",
+  "hand": "../../assets/drawing-hand.png",
+  "defaults": {
+    "fps": 30,
+    "cap-long-edge": 1080,
+    "ink-path": "skeleton",
+    "color-fill": "brush",
+    "transition": "fade",
+    "transitionMs": 500
+  },
+  "scenes": [
+    {
+      "image": "../demo/scene-01-monkey-mountain.png",
+      "annotation": "../demo/scene-01-monkey-mountain.annotation.json"
+    },
+    {
+      "image": "../demo/scene-premium-bag.png",
+      "annotation": "../demo/scene-premium-bag.annotation.json"
+    }
+  ]
+}
