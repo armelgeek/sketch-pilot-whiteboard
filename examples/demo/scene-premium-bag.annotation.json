@@ -58,9 +58,7 @@
         "startMs": 2000,
         "durationMs": 3400,
         "maskPaddingPx": 22,
-        "protectedRegions": [],
-        "style": "slide",
-        "slideFrom": "left"
+        "protectedRegions": []
       },
       "handPath": {
         "start": [

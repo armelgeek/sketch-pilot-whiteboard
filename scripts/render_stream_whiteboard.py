@@ -652,11 +652,10 @@ class RegionStreamRenderer:
             else _frame_progress_indices(n, frames)
         )
         last: int | None = None
+        smooth_x, smooth_y = None, None
+        smooth_angle = 0.0
+
         for si in idx_for_frame:
-            # épaisseur liée au poids détail : la main "appuie" plus fort
-            # quand elle ralentit sur du détail (weight>1), trait plus fin
-            # sur les trajets rapides (weight<1) -- même logique que la
-            # vitesse variable, cohérent avec un vrai geste de dessin.
             radius = None
             if weights is not None:
                 w = weights[si]
@@ -669,10 +668,19 @@ class RegionStreamRenderer:
                         continue
                     self._reveal_ink_segment(samples[k - 1], samples[k], allowed, radius=radius)
             sx, sy = samples[si]
-            # oriente la main selon la direction du trait plutôt que de la
-            # garder figée (utilise le point précédent réellement écrit)
-            angle = self._tangent_angle(samples[last], samples[si]) if last is not None else 0.0
-            writer.write(self._snapshot_with_tip(sx, sy, angle_deg=angle))
+            raw_angle = self._tangent_angle(samples[last], samples[si]) if last is not None else 0.0
+
+            # Lissage exponentiel (EMA) de la position et de la rotation de la main
+            # Évite les saccades et tremblements saccadés sur les petits virages du tracé
+            if smooth_x is None:
+                smooth_x, smooth_y = float(sx), float(sy)
+                smooth_angle = raw_angle
+            else:
+                smooth_x = smooth_x * 0.65 + sx * 0.35
+                smooth_y = smooth_y * 0.65 + sy * 0.35
+                smooth_angle = smooth_angle * 0.80 + raw_angle * 0.20
+
+            writer.write(self._snapshot_with_tip(int(smooth_x), int(smooth_y), angle_deg=smooth_angle))
             last = si
 
     # ── 添彩段：brush 或 contour-wipe，限制在 allowed 内 ──
@@ -1287,16 +1295,18 @@ class RegionStreamRenderer:
 
                 cur_ms += ink_frames * ms_per_frame
 
-                # La phase couleur suit la silhouette réelle de l'objet, pas le
-                # rectangle `allowed` — sinon le fond autour de l'objet se
-                # retrouve recouvert en même temps ("effet plaque").
+                # La phase couleur suit la silhouette réelle de l'objet.
+                # Si color_fill est 'none', on applique la silhouette directement à la fin du tracé sans phase de balayage.
                 silhouette = self._silhouette_mask(allowed)
                 ever_silhouette |= silhouette
-                if cfg.color_fill == "contour-wipe":
+                if cfg.color_fill == "none":
+                    self.drawn[silhouette] = self.color_img.astype(np.float32)[silhouette]
+                elif cfg.color_fill == "contour-wipe":
                     self._wash_contour(writer, color_frames, silhouette, last_ink_point=last_ink_pt)
+                    cur_ms += color_frames * ms_per_frame
                 else:
                     self._wash_brush(writer, color_frames, centers, silhouette)
-                cur_ms += color_frames * ms_per_frame
+                    cur_ms += color_frames * ms_per_frame
 
                 # Badge "détection IA" optionnel : contour néon qui suit la
                 # silhouette réelle (pas un carré) + chip de label "LABEL 92%".
