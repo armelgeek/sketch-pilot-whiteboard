@@ -5,7 +5,7 @@
     "height": 864
   },
   "storyBasis": "Croquis doodle : titre \"Premium Image\", un sac à main façon Birkin avec une étiquette de prix barrée ($1500 -> $700), et un point d'interrogation à droite.",
-  "sceneDurationMs": 9500,
+  "sceneDurationMs": 11700,
   "elements": [
     {
       "id": "title",
@@ -18,7 +18,7 @@
         "x": 100,
         "y": 75,
         "width": 680,
-        "height": 205
+        "height": 117
       },
       "reveal": {
         "direction": "top_to_bottom",
@@ -26,17 +26,16 @@
         "durationMs": 1600,
         "maskPaddingPx": 22,
         "protectedRegions": [],
-        "style": "bounce",
-        "slideFrom": "top"
+        "style": "typewriter"
       },
       "handPath": {
         "start": [
           440,
-          177.5
+          133.5
         ],
         "end": [
           440,
-          280
+          192
         ],
         "easing": "easeInOut"
       }
@@ -137,6 +136,40 @@
         "end": [
           1270.5,
           600
+        ],
+        "easing": "easeInOut"
+      }
+    },
+    {
+      "id": "region_5",
+      "label": "Zone 5",
+      "sequence": 5,
+      "narrativeRole": "Nouvel élément",
+      "type": "structure",
+      "subtitle": "",
+      "region": {
+        "x": 104,
+        "y": 192,
+        "width": 672,
+        "height": 101
+      },
+      "reveal": {
+        "direction": "top_to_bottom",
+        "startMs": 9200,
+        "durationMs": 2000,
+        "maskPaddingPx": 22,
+        "protectedRegions": [],
+        "style": "slide",
+        "slideFrom": "left"
+      },
+      "handPath": {
+        "start": [
+          440,
+          242.5
+        ],
+        "end": [
+          440,
+          293
         ],
         "easing": "easeInOut"
       }

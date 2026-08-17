@@ -94,6 +94,33 @@ def _frame_progress_indices_weighted(weights: list[float], target_frames: int) -
     return out
 
 
+class AsyncVideoWriter:
+    def __init__(self, path_str: str, fourcc, fps: int, size: tuple[int, int], max_queue: int = 128):
+        import queue, threading
+        self.writer = cv2.VideoWriter(path_str, fourcc, fps, size)
+        self.q = queue.Queue(maxsize=max_queue)
+        self.stopped = False
+        self.thread = threading.Thread(target=self._worker, daemon=True)
+        self.thread.start()
+
+    def _worker(self):
+        while True:
+            frame = self.q.get()
+            if frame is None:
+                self.q.task_done()
+                break
+            self.writer.write(frame)
+            self.q.task_done()
+
+    def write(self, frame: np.ndarray):
+        self.q.put(frame)
+
+    def close(self):
+        self.q.put(None)
+        self.thread.join()
+        self.writer.release()
+
+
 # ──────────────────────────────────────────────────────────────
 # 每区域的 stream 笔迹渲染，写入共享持久画布
 # ──────────────────────────────────────────────────────────────
@@ -724,7 +751,7 @@ class RegionStreamRenderer:
 
     # ── revealStyle="typewriter" (texte only) : comme wipe mais quantifié en
     #    paliers (façon "chaque lettre saute d'un coup"), toujours
-    #    gauche->droite quel que soit `direction`, sans main.
+    #    gauche->droite quel que soit `direction`, AVEC main écriture réelle.
     def _typewriter_reveal(self, writer, frames: int, mask: np.ndarray, steps: int = 14) -> None:
         if frames <= 0:
             return
@@ -733,21 +760,52 @@ class RegionStreamRenderer:
             for _ in range(frames):
                 writer.write(snap)
             return
-        vals = self._grid_x[mask]
-        lo, hi = int(vals.min()), int(vals.max())
+        ys, xs = np.where(mask)
+        lo, hi = int(xs.min()), int(xs.max())
+        min_y, max_y = int(ys.min()), int(ys.max())
+        height_span = max(10, max_y - min_y)
+        mid_y = (min_y + max_y) // 2
         color_f32 = self.color_img.astype(np.float32)
+
         steps = max(1, min(steps, frames))
         frames_per_step = [len(c) for c in np.array_split(np.arange(frames), steps)]
         step_idx = 0
         frames_left_in_step = frames_per_step[0]
+
         for f in range(frames):
             while frames_left_in_step <= 0 and step_idx < steps - 1:
                 step_idx += 1
                 frames_left_in_step = frames_per_step[step_idx]
-            thresh = lo + (step_idx + 1) / steps * (hi - lo)
+
+            cur_total_in_step = max(1, frames_per_step[step_idx])
+            frame_in_step = cur_total_in_step - frames_left_in_step
+            step_progress = frame_in_step / cur_total_in_step  # 0.0 -> 1.0 dans la lettre
+
+            prev_thresh = lo + step_idx / steps * (hi - lo)
+            next_thresh = lo + (step_idx + 1) / steps * (hi - lo)
+            cur_x = prev_thresh + step_progress * (next_thresh - prev_thresh)
+
+            # Révéler le texte par palier de lettre
+            thresh = next_thresh if step_progress > 0.3 else prev_thresh
             reveal = mask & (self._grid_x <= thresh)
             self.drawn[reveal] = color_f32[reveal]
-            writer.write(self.drawn.astype(np.uint8))
+
+            # Mouvement d'écriture manuscrite réaliste de la main :
+            # La main descend sur la feuille pour tracer la lettre, effectue une petite boucle Y (boucle de la lettre) et remonte légèrement (levé de stylo) avant la suivante.
+            stroke_y_wave = math.sin(step_progress * math.pi * 2) * (height_span * 0.4)
+            tip_x = int(cur_x)
+            tip_y = int(mid_y + stroke_y_wave)
+
+            # Animation de sortie fluide de la main à la fin
+            hand_alpha = 1.0
+            offset_y = 0
+            progress = (f + 1) / frames
+            if progress > 0.88:
+                exit_t = (progress - 0.88) / 0.12
+                hand_alpha = max(0.0, 1.0 - exit_t)
+                offset_y = int(exit_t * 60)
+
+            writer.write(self._snapshot_with_tip(tip_x, tip_y + offset_y, alpha=hand_alpha))
             frames_left_in_step -= 1
 
     @staticmethod
@@ -1042,32 +1100,6 @@ class RegionStreamRenderer:
             if is_jump:
                 pen_lifts.update(range(start_idx, len(samples)))
         return samples, pen_lifts, sample_cell
-
-class AsyncVideoWriter:
-    def __init__(self, path_str: str, fourcc, fps: int, size: tuple[int, int], max_queue: int = 128):
-        import queue, threading
-        self.writer = cv2.VideoWriter(path_str, fourcc, fps, size)
-        self.q = queue.Queue(maxsize=max_queue)
-        self.stopped = False
-        self.thread = threading.Thread(target=self._worker, daemon=True)
-        self.thread.start()
-
-    def _worker(self):
-        while True:
-            frame = self.q.get()
-            if frame is None:
-                self.q.task_done()
-                break
-            self.writer.write(frame)
-            self.q.task_done()
-
-    def write(self, frame: np.ndarray):
-        self.q.put(frame)
-
-    def close(self):
-        self.q.put(None)
-        self.thread.join()
-        self.writer.release()
 
     # ── 主渲染 ──
     def render_to(self, raw_path: Path, total_ms: int) -> Path:
