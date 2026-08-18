@@ -377,7 +377,7 @@ export default function App() {
 
       <Toast msg={toastMsg} type={toastType} />
 
-      <input ref={fileInputDir} type="file" webkitdirectory multiple hidden />
+      <input ref={fileInputDir} type="file" webkitDirectory multiple hidden />
       <input ref={fileInputSrt} type="file" accept=".srt" hidden />
       <input ref={fileInputFiles} type="file" accept=".png,.jpg,.jpeg,.json,.srt" multiple hidden />
     </div>
