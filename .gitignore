@@ -1,2 +1,6 @@
 .cache_silhouettes
 .cache_strokes
+node_modules
+dist
+.env.local
+.env.*.local

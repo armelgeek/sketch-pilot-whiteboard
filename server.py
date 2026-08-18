@@ -83,7 +83,7 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         content_length = int(self.headers.get("Content-Length", 0))
         body_bytes = self.rfile.read(content_length)
-        
+
         try:
             body = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
         except Exception:
@@ -101,6 +101,13 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
             self.handle_parse_srt(body)
         else:
             self.send_json_response({"error": "Endpoint not found"}, status=404)
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.end_headers()
 
     def list_scenes(self) -> dict:
         search_dirs = [

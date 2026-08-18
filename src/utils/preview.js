@@ -19,6 +19,8 @@ export function generateAnnotationPreview(sourceImg, region, maxSize = 80) {
   canvas.height = previewH;
 
   try {
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(
       sourceImg,
       x, y, width, height,

@@ -1,19 +1,23 @@
 {
   "sceneId": "scene-premium-bag",
+  "name": "Scène",
+  "sceneDurationMs": 11700,
+  "transition": {
+    "transitionAfter": "cut",
+    "transitionMs": 500
+  },
   "canvas": {
     "width": 1536,
     "height": 864
   },
-  "storyBasis": "Croquis doodle : titre \"Premium Image\", un sac à main façon Birkin avec une étiquette de prix barrée ($1500 -> $700), et un point d'interrogation à droite.",
-  "sceneDurationMs": 11700,
   "elements": [
     {
       "id": "title",
       "label": "Titre \"Premium Image\"",
-      "sequence": 1,
-      "narrativeRole": "Accroche / titre",
-      "subtitle": "Le titre \"Premium Image\" apparaît, souligné d'un trait à main levée.",
       "type": "text",
+      "narrativeRole": "Accroche / titre",
+      "sequence": 1,
+      "subtitle": "Le titre \"Premium Image\" apparaît, souligné d'un trait à main levée.",
       "region": {
         "x": 100,
         "y": 75,
@@ -21,12 +25,12 @@
         "height": 117
       },
       "reveal": {
-        "direction": "top_to_bottom",
+        "direction": "left_to_right",
+        "style": "slide",
         "startMs": 300,
         "durationMs": 1600,
         "maskPaddingPx": 22,
-        "protectedRegions": [],
-        "style": "typewriter"
+        "protectedRegions": []
       },
       "handPath": {
         "start": [
@@ -43,10 +47,10 @@
     {
       "id": "bag",
       "label": "Sac à main",
-      "sequence": 2,
-      "narrativeRole": "Sujet principal",
-      "subtitle": "Le sac se dessine au trait, avec ses anses et sa fermeture détaillées.",
       "type": "object",
+      "narrativeRole": "Sujet principal",
+      "sequence": 2,
+      "subtitle": "Le sac se dessine au trait, avec ses anses et sa fermeture détaillées.",
       "region": {
         "x": 770,
         "y": 230,
@@ -55,6 +59,7 @@
       },
       "reveal": {
         "direction": "top_to_bottom",
+        "style": "iris",
         "startMs": 2000,
         "durationMs": 3400,
         "maskPaddingPx": 22,
@@ -75,10 +80,10 @@
     {
       "id": "tag",
       "label": "Étiquette de prix",
-      "sequence": 3,
-      "narrativeRole": "Détail / accroche prix",
-      "subtitle": "Une étiquette apparaît avec le prix barré 1500$ ramené à 700$.",
       "type": "prop",
+      "narrativeRole": "Détail / accroche prix",
+      "sequence": 3,
+      "subtitle": "Une étiquette apparaît avec le prix barré 1500$ ramené à 700$.",
       "region": {
         "x": 595,
         "y": 405,
@@ -87,6 +92,7 @@
       },
       "reveal": {
         "direction": "top_to_bottom",
+        "style": "",
         "startMs": 5500,
         "durationMs": 2000,
         "maskPaddingPx": 22,
@@ -102,16 +108,15 @@
           652
         ],
         "easing": "easeInOut"
-      },
-      "colorAccentHex": "#ffffff"
+      }
     },
     {
       "id": "question",
       "label": "Point d'interrogation",
-      "sequence": 4,
-      "narrativeRole": "Suspense / appel à la curiosité",
-      "subtitle": "Un point d'interrogation apparaît à droite, laissant planer le doute.",
       "type": "symbol",
+      "narrativeRole": "Suspense / appel à la curiosité",
+      "sequence": 4,
+      "subtitle": "Un point d'interrogation apparaît à droite, laissant planer le doute.",
       "region": {
         "x": 1170,
         "y": 220,
@@ -119,12 +124,12 @@
         "height": 380
       },
       "reveal": {
-        "direction": "top_to_bottom",
+        "direction": "right_to_left",
+        "style": "",
         "startMs": 7600,
         "durationMs": 1400,
         "maskPaddingPx": 22,
-        "protectedRegions": [],
-        "style": "iris"
+        "protectedRegions": []
       },
       "handPath": {
         "start": [
@@ -141,9 +146,9 @@
     {
       "id": "region_5",
       "label": "Zone 5",
-      "sequence": 5,
-      "narrativeRole": "Nouvel élément",
       "type": "structure",
+      "narrativeRole": "Nouvel élément",
+      "sequence": 5,
       "subtitle": "",
       "region": {
         "x": 104,
@@ -153,6 +158,7 @@
       },
       "reveal": {
         "direction": "top_to_bottom",
+        "style": "",
         "startMs": 9200,
         "durationMs": 2000,
         "maskPaddingPx": 22,
