@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect } from 'react'
 import Topbar from './components/Topbar'
 import Canvas from './components/Canvas'
 import Sidebar from './components/Sidebar'
-import Controls from './components/Controls'
 import Toast from './components/Toast'
 import { parseSRT } from './utils/srt'
 
@@ -23,21 +22,16 @@ export default function App() {
   const [sceneIdx, setSceneIdx] = useState(-1);
   const [cfg, setCfg] = useState(null);
   const [mode, setMode] = useState('select'); // 'select' | 'draw'
-  const [time, setTime] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
   const [srtItems, setSrtItems] = useState([]);
   const [selectedElement, setSelectedElement] = useState(0);
   const [showOverlay, setShowOverlay] = useState(true);
   const [source, setSource] = useState(null);
-  const [paperColor, setPaperColor] = useState('#fdf0d0');
   const [toastMsg, setToastMsg] = useState('');
   const [toastType, setToastType] = useState('');
   const [dirty, setDirty] = useState(new Set());
-  const [hideHint, setHideHint] = useState(false);
   const fileInputDir = useRef();
   const fileInputSrt = useRef();
   const fileInputFiles = useRef();
-  const renderCaches = useRef(null);
 
   const canFS = typeof window !== 'undefined' && 'showDirectoryPicker' in window;
 
@@ -149,10 +143,8 @@ export default function App() {
 
   function loadScene(idx, scenesToLoad = scenes) {
     if (idx < 0 || idx >= scenesToLoad.length) return;
-    setIsPlaying(false);
     setSceneIdx(idx);
     setSelectedElement(0);
-    setTime(0);
 
     const sc = scenesToLoad[idx];
     const img = new Image();
@@ -190,35 +182,11 @@ export default function App() {
       }
 
       setCfg(sc.cfg);
-      samplePaper(img);
     };
     img.onerror = () => toast('Échec du chargement de l\'image : ' + sc.imgName, true);
     img.src = sc.imgUrl;
   }
 
-  function samplePaper(img) {
-    try {
-      const t = document.createElement('canvas');
-      t.width = img.naturalWidth;
-      t.height = img.naturalHeight;
-      const tc = t.getContext('2d');
-      tc.drawImage(img, 0, 0);
-      const w = t.width;
-      const h = t.height;
-      const pts = [[2, 2], [w - 3, 2], [2, h - 3], [w - 3, h - 3]];
-      let r = 0, g = 0, b = 0;
-      pts.forEach(([x, y]) => {
-        const d = tc.getImageData(x, y, 1, 1).data;
-        r += d[0];
-        g += d[1];
-        b += d[2];
-      });
-      const color = `rgb(${Math.round(r / 4)},${Math.round(g / 4)},${Math.round(b / 4)})`;
-      setPaperColor(color);
-    } catch (e) {
-      setPaperColor('#fdf0d0');
-    }
-  }
 
   // Drag and drop
   useEffect(() => {
@@ -347,12 +315,7 @@ export default function App() {
         <Canvas
           cfg={cfg}
           source={source}
-          time={time}
-          isPlaying={isPlaying}
-          paperColor={paperColor}
           showOverlay={showOverlay}
-          renderCaches={renderCaches}
-          hideHint={hideHint}
           onOpenDir={openDir}
           onLoadSrt={() => fileInputSrt.current?.click()}
           mode={mode}
@@ -372,8 +335,6 @@ export default function App() {
           />
         )}
       </div>
-
-      <Controls time={time} onTimeChange={setTime} isPlaying={isPlaying} onPlayChange={setIsPlaying} cfg={cfg} />
 
       <Toast msg={toastMsg} type={toastType} />
 

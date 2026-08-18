@@ -1,62 +1,71 @@
-import { useEffect, useRef } from 'react'
-import { renderCanvas } from '../utils/render'
+import { useEffect, useRef, useState } from 'react'
 import AnnotationCanvas from './AnnotationCanvas'
 
 export default function Canvas({
   cfg,
   source,
-  time,
-  isPlaying,
-  paperColor,
   showOverlay,
-  renderCaches,
-  hideHint,
   onOpenDir,
   onLoadSrt,
   mode,
   selectedElement,
+  onSelectElement,
+  onAddElement,
+  onUpdateElement,
   scenes,
-  sceneIdx
+  sceneIdx,
 }) {
   const canvasRef = useRef()
   const containerRef = useRef()
+  const [containerSize, setContainerSize] = useState({ w: 800, h: 600 })
 
+  // Observe container dimensions pour adapter Konva stage
   useEffect(() => {
+    if (!containerRef.current) return
+    const ro = new ResizeObserver(entries => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect
+        setContainerSize({ w: Math.floor(width), h: Math.floor(height) })
+      }
+    })
+    ro.observe(containerRef.current)
+    return () => ro.disconnect()
+  }, [])
+
+  // Rendu image statique avec régions
+  useEffect(() => {
+    if (mode !== 'select') return
     if (!canvasRef.current || !cfg || !source) return
 
     const canvas = canvasRef.current
     const ctx = canvas.getContext('2d')
+    const w = cfg.canvas?.width || 1
+    const h = cfg.canvas?.height || 1
 
-    renderCanvas(
-      ctx,
-      cfg,
-      source,
-      cfg.elements || [],
-      paperColor,
-      time,
-      isPlaying,
-      renderCaches
-    )
+    canvas.width = w
+    canvas.height = h
 
-    // Draw overlay if needed
+    ctx.drawImage(source, 0, 0)
+
     if (showOverlay && cfg.elements) {
-      cfg.elements.forEach(e => {
+      cfg.elements.forEach((e, i) => {
         ctx.save()
-        ctx.strokeStyle = '#f5a623'
-        ctx.lineWidth = 2
-        ctx.globalAlpha = 0.3
+        ctx.strokeStyle = i === selectedElement ? '#f5a623' : '#666'
+        ctx.lineWidth = i === selectedElement ? 2.5 : 1
+        ctx.globalAlpha = i === selectedElement ? 0.7 : 0.3
         const r = e.region
         ctx.strokeRect(r.x, r.y, r.width, r.height)
         ctx.restore()
       })
     }
-  }, [cfg, source, time, isPlaying, paperColor, showOverlay])
+  }, [cfg, source, showOverlay, selectedElement, mode])
 
   return (
     <div
       ref={containerRef}
       className="stage-wrap flex-1 flex items-center justify-center overflow-auto p-5 bg-[#0b0c0e] relative"
     >
+      {/* Dropzone overlay */}
       <div className="dropzone-overlay absolute inset-0 bg-[#0f1115]/92 border-2 border-dashed border-blue-500 flex flex-col items-center justify-center z-[100] opacity-0 pointer-events-none transition-opacity duration-200 backdrop-blur-sm">
         <div className="dropzone-icon text-5xl mb-3 text-blue-500">📥</div>
         <div className="dropzone-title text-xl font-semibold text-white mb-1.5">
@@ -68,33 +77,27 @@ export default function Canvas({
         </div>
       </div>
 
+      {/* Écran d'accueil si aucun cfg */}
       {!cfg ? (
         <div className="hint p-10 text-[#9aa1ab] text-sm leading-relaxed max-w-[720px] bg-[#161920] rounded-xl border border-[#262a34] text-center">
           <h2 className="text-white text-xl font-bold mt-0 mb-4">
             👋 Bienvenue sur SRT Whiteboard Animation !
           </h2>
           <p>
-            Vous pouvez <b className="text-[#f5a623]">Glisser & Déposer (Drag & Drop)</b> des
-            dossiers, images <code className="bg-[#222630] px-2 py-0.5 rounded text-blue-400 font-mono">
-              .png
-            </code>{' '}
+            Vous pouvez <b className="text-[#f5a623]">Glisser &amp; Déposer (Drag &amp; Drop)</b> des
+            dossiers, images{' '}
+            <code className="bg-[#222630] px-2 py-0.5 rounded text-blue-400 font-mono">.png</code>{' '}
             ou sous-titres{' '}
-            <code className="bg-[#222630] px-2 py-0.5 rounded text-blue-400 font-mono">
-              .srt
-            </code>{' '}
+            <code className="bg-[#222630] px-2 py-0.5 rounded text-blue-400 font-mono">.srt</code>{' '}
             directement dans cette fenêtre.
           </p>
           <div className="text-left bg-[#101216] p-4 rounded-lg my-4 text-xs leading-relaxed">
             📌 <b>Instructions d'utilisation :</b>
             <br />
             1. <b>Glissez-déposez vos fichiers</b> images{' '}
-            <code className="bg-[#222630] px-1.5 py-0.5 rounded text-blue-400 font-mono">
-              .png
-            </code>{' '}
+            <code className="bg-[#222630] px-1.5 py-0.5 rounded text-blue-400 font-mono">.png</code>{' '}
             ou sous-titres{' '}
-            <code className="bg-[#222630] px-1.5 py-0.5 rounded text-blue-400 font-mono">
-              .srt
-            </code>{' '}
+            <code className="bg-[#222630] px-1.5 py-0.5 rounded text-blue-400 font-mono">.srt</code>{' '}
             sur la page.
             <br />
             2. Passez en mode <b>✏️ Dessiner une zone</b> puis glissez votre curseur sur l'image
@@ -121,22 +124,29 @@ export default function Canvas({
             </button>
           </div>
         </div>
+
       ) : mode === 'draw' ? (
-        <div className="flex items-center justify-center">
+        // ── Mode annotation Konva ──────────────────────────────────────────────
+        <div className="flex items-center justify-center w-full h-full">
           <AnnotationCanvas
             cfg={cfg}
             imgUrl={scenes?.[sceneIdx]?.imgUrl}
             selectedElement={selectedElement}
-            width={Math.min(800, containerRef.current?.clientWidth || 800)}
-            height={Math.min(600, containerRef.current?.clientHeight || 600)}
+            onSelectElement={onSelectElement}
+            onAddElement={onAddElement}
+            onUpdateElement={onUpdateElement}
+            containerWidth={containerSize.w - 40}
+            containerHeight={containerSize.h - 40}
           />
         </div>
+
       ) : (
+        // ── Mode prévisualisation 2D canvas ───────────────────────────────────
         <canvas
           ref={canvasRef}
           className="block max-w-full max-h-[calc(100vh-190px)] shadow-[0_10px_40px_rgba(0,0,0,0.6)] rounded-md touch-none cursor-default"
         />
       )}
     </div>
-  );
+  )
 }
