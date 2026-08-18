@@ -157,15 +157,14 @@ class RegionStreamRenderer:
         self.grid_blocks = sr._to_grid_blocks(self.thresh_map, cfg.grid_edge)
         self.active_all = sr._active_mask(self.thresh_map, cfg.grid_edge, cfg.ink_threshold)
         self.ink_pixels = self.thresh_map < cfg.ink_threshold
-        self.ink_paint = np.repeat(self.thresh_map[:, :, None], 3, axis=2).astype(np.float32)
+        self.ink_paint = np.repeat(self.thresh_map[:, :, None], 3, axis=2).astype(np.uint8)
 
         # 背景染成画布底色，让上色阶段背景与起笔一致（不碰墨迹）
         if cfg.match_bg:
             self._match_original_background()
 
-        # 共享持久画布
-        self.drawn = np.empty((self.out_h, self.out_w, 3), dtype=np.float32)
-        self.drawn[...] = self.canvas_bgr.astype(np.float32)
+        # 共享持久画布 (uint8 pour copie rapide de trame sans conversion)
+        self.drawn = np.tile(self.canvas_bgr[None, None, :], (self.out_h, self.out_w, 1)).astype(np.uint8)
         # grille de coordonnées réutilisable pour le wipe directionnel (revealStyle="wipe")
         self._grid_y, self._grid_x = np.indices((self.out_h, self.out_w))
 
@@ -224,7 +223,7 @@ class RegionStreamRenderer:
         return (c * e + e // 2, r * e + e // 2)
 
     def _snapshot_with_tip(self, px: int, py: int, alpha: float = 1.0, angle_deg: float = 0.0) -> np.ndarray:
-        snap = self.drawn.astype(np.uint8)
+        snap = self.drawn.copy()
         if self.tip is not None and alpha > 0.0:
             self.tip.stamp(snap, px, py, alpha=alpha, angle_deg=angle_deg)
         return snap
@@ -1394,6 +1393,8 @@ def _parse_args(argv=None):
                    help="style de trait façon Golpo Pen/Stylus/Marker : fine (pointe fine, "
                         "précis, aminci) | stylus (défaut, tel quel) | marker (marqueur épais, "
                         "traits confiants). Combine épaisseur de trait + rayons d'encre/pinceau.")
+    p.add_argument("--preview", action="store_true",
+                   help="Rendu rapide basse résolution (480p), bas FPS (20), preset ultrafast et CRF 30 pour itérer")
     return p.parse_args(argv)
 
 
@@ -1405,10 +1406,21 @@ _PEN_STYLE_PRESETS = {
 }
 
 
-def _build_cfg(args) -> sr.Config:
+def _build_cfg(args) -> tuple[sr.Config, str, int]:
     kw: dict = {}
-    if args.fps is not None:
-        kw["fps"] = args.fps
+    if args.preview:
+        kw["fps"] = args.fps if args.fps is not None else 30
+        kw["cap_long_edge"] = args.cap_long_edge if args.cap_long_edge is not None else 720
+        transcode_preset = "veryfast"
+        transcode_crf = 24
+    else:
+        if args.fps is not None:
+            kw["fps"] = args.fps
+        if args.cap_long_edge is not None:
+            kw["cap_long_edge"] = args.cap_long_edge
+        transcode_preset = "medium"
+        transcode_crf = 20
+
     if args.grid_edge is not None:
         kw["grid_edge"] = args.grid_edge
     line_weight, ink_radius, brush_radius = _PEN_STYLE_PRESETS[args.pen_style]
@@ -1418,8 +1430,6 @@ def _build_cfg(args) -> sr.Config:
     # --brush-radius explicite reste prioritaire sur le preset --pen-style
     if args.brush_radius is not None:
         kw["brush_radius"] = args.brush_radius
-    if args.cap_long_edge is not None:
-        kw["cap_long_edge"] = args.cap_long_edge
     kw["ink_path_mode"] = args.ink_path
     kw["color_fill"] = args.color_fill
     kw["pause_mode"] = args.pause
@@ -1437,15 +1447,15 @@ def _build_cfg(args) -> sr.Config:
     if tip_y is not None:
         kw["tip_anchor_y"] = tip_y
 
-    return sr.Config(**kw)
+    return sr.Config(**kw), transcode_preset, transcode_crf
 
 
 def main(argv=None) -> int:
     args = _parse_args(argv)
-    cfg = _build_cfg(args)
+    cfg, transcode_preset, transcode_crf = _build_cfg(args)
 
     print("=" * 56)
-    print("SRT 白板动画整合渲染器 (mask 编排 + stream 画法)")
+    print(f"SRT 白板动画整合渲染器 (mask 编排 + stream 画法) [{'PREVIEW MODE' if args.preview else 'FINAL MODE'}]")
     print("=" * 56)
 
     image_bgr = sr._imread_any(args.image)
@@ -1485,7 +1495,7 @@ def main(argv=None) -> int:
           f"笔迹: {cfg.ink_path_mode}, 上色: {cfg.color_fill}")
 
     renderer.render_to(raw_path, total_ms)
-    final = sr.transcode_h264(raw_path, out_path)
+    final = sr.transcode_h264(raw_path, out_path, preset=transcode_preset, crf=transcode_crf)
 
     size_mb = final.stat().st_size / (1024 * 1024)
     print(f"\n最终视频: {final}  ({size_mb:.2f} MB)")

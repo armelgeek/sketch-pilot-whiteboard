@@ -3,8 +3,8 @@
   "name": "Scène",
   "sceneDurationMs": 11700,
   "transition": {
-    "transitionAfter": "cut",
-    "transitionMs": 500
+    "transitionAfter": "slideup",
+    "transitionMs": 2300
   },
   "canvas": {
     "width": 1536,
@@ -55,7 +55,18 @@
         "x": 770,
         "y": 230,
         "width": 400,
-        "height": 535
+        "height": 535,
+        "handPath": {
+          "start": [
+            970,
+            497.5
+          ],
+          "end": [
+            831,
+            584
+          ],
+          "easing": "easeInOut"
+        }
       },
       "reveal": {
         "direction": "top_to_bottom",
@@ -176,5 +187,7 @@
         "easing": "easeInOut"
       }
     }
-  ]
+  ],
+  "transitionAfter": "slideright",
+  "transitionMs": 2300
 }

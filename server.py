@@ -65,6 +65,40 @@ def generate_annotation_via_ts(img_path: Path, json_path: Path, story_hint: str 
         return False
     return json_path.is_file()
 
+import threading
+import time
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+
+JOBS = {}
+JOBS_LOCK = threading.Lock()
+RENDER_EXECUTOR = ThreadPoolExecutor(max_workers=2)
+
+def _execute_render_task(job_id: str, cmd: list[str], rel_out: str):
+    with JOBS_LOCK:
+        if job_id in JOBS:
+            JOBS[job_id]["status"] = "processing"
+            JOBS[job_id]["progress"] = 25
+
+    print(f"[QUEUE] Executing job {job_id}: {' '.join(cmd)}")
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        with JOBS_LOCK:
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "completed"
+                JOBS[job_id]["progress"] = 100
+                JOBS[job_id]["videoUrl"] = rel_out
+                JOBS[job_id]["stdout"] = res.stdout
+        print(f"[QUEUE] Job {job_id} finished successfully!")
+    except subprocess.CalledProcessError as e:
+        err_msg = e.stderr or str(e)
+        print(f"[QUEUE ERROR] Job {job_id} failed: {err_msg}")
+        with JOBS_LOCK:
+            if job_id in JOBS:
+                JOBS[job_id]["status"] = "failed"
+                JOBS[job_id]["progress"] = 0
+                JOBS[job_id]["error"] = err_msg
+
 class WhiteboardHandler(SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(PROJECT_ROOT), **kwargs)
@@ -73,11 +107,24 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
         parsed = urlparse(self.path)
         if parsed.path == "/api/scenes":
             self.send_json_response(self.list_scenes())
+        elif parsed.path == "/api/render_status":
+            query = parse_qs(parsed.query)
+            job_id = query.get("jobId", [""])[0]
+            self.handle_get_job_status(job_id)
         else:
             # Route default "/" to assets/preview.html
             if parsed.path == "/" or parsed.path == "/preview":
                 self.path = "/assets/preview.html"
             super().do_GET()
+
+    def handle_get_job_status(self, job_id: str):
+        if not job_id:
+            return self.send_json_response({"error": "Missing jobId parameter"}, status=400)
+        with JOBS_LOCK:
+            job = JOBS.get(job_id)
+        if not job:
+            return self.send_json_response({"error": "Job not found"}, status=404)
+        self.send_json_response(job)
 
     def do_POST(self):
         parsed = urlparse(self.path)
@@ -99,6 +146,9 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
             self.handle_merge_scenes(body)
         elif parsed.path == "/api/parse_srt":
             self.handle_parse_srt(body)
+        elif parsed.path == "/api/render_status":
+            job_id = body.get("jobId", "")
+            self.handle_get_job_status(job_id)
         else:
             self.send_json_response({"error": "Endpoint not found"}, status=404)
 
@@ -302,6 +352,7 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
         color_fill = render_opts.get("colorFill") or "brush"
         pen_style = render_opts.get("penStyle") or "stylus"
         hand_rotate = bool(render_opts.get("handRotate"))
+        is_preview = render_opts.get("preview", True)
 
         cmd = [
             py_bin,
@@ -316,23 +367,29 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
         ]
         if hand_rotate:
             cmd.append("--hand-rotate")
+        if is_preview:
+            cmd.append("--preview")
 
-        print(f"[SERVER] Running render command: {' '.join(cmd)}")
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            rel_out = "/" + str(out_path.relative_to(PROJECT_ROOT))
-            self.send_json_response({
-                "status": "ok",
-                "message": "Render MP4 thành công!",
-                "videoUrl": rel_out,
-                "stdout": res.stdout
-            })
-        except subprocess.CalledProcessError as e:
-            print(f"[SERVER LỖI] {e.stderr}")
-            self.send_json_response({
-                "status": "error",
-                "error": e.stderr or str(e)
-            }, status=500)
+        print(f"[SERVER] Enqueuing render command: {' '.join(cmd)}")
+        rel_out = "/" + str(out_path.relative_to(PROJECT_ROOT))
+        job_id = f"job_{uuid.uuid4().hex[:8]}"
+
+        with JOBS_LOCK:
+            JOBS[job_id] = {
+                "jobId": job_id,
+                "status": "queued",
+                "progress": 0,
+                "videoUrl": None,
+                "error": None,
+                "createdAt": time.time()
+            }
+
+        RENDER_EXECUTOR.submit(_execute_render_task, job_id, cmd, rel_out)
+        self.send_json_response({
+            "status": "queued",
+            "jobId": job_id,
+            "message": "Render task submitted to queue"
+        }, status=202)
 
     def handle_merge_scenes(self, body: dict):
         inputs = body.get("inputs", [])
@@ -355,16 +412,25 @@ class WhiteboardHandler(SimpleHTTPRequestHandler):
         if transition_ms:
             cmd += ["--transition-ms", str(transition_ms)]
 
-        try:
-            res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            rel_out = "/" + str(out_path.relative_to(PROJECT_ROOT))
-            self.send_json_response({
-                "status": "ok",
-                "message": "Gộp video thành công!",
-                "videoUrl": rel_out
-            })
-        except subprocess.CalledProcessError as e:
-            self.send_json_response({"status": "error", "error": e.stderr}, status=500)
+        rel_out = "/" + str(out_path.relative_to(PROJECT_ROOT))
+        job_id = f"job_{uuid.uuid4().hex[:8]}"
+
+        with JOBS_LOCK:
+            JOBS[job_id] = {
+                "jobId": job_id,
+                "status": "queued",
+                "progress": 0,
+                "videoUrl": None,
+                "error": None,
+                "createdAt": time.time()
+            }
+
+        RENDER_EXECUTOR.submit(_execute_render_task, job_id, cmd, rel_out)
+        self.send_json_response({
+            "status": "queued",
+            "jobId": job_id,
+            "message": "Merge task submitted to queue"
+        }, status=202)
 
     def handle_parse_srt(self, body: dict):
         srt_content = body.get("srtContent", "")

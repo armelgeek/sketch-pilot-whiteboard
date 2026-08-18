@@ -1712,13 +1712,14 @@ class StreamBoardRenderer:
 # ──────────────────────────────────────────────────────────────
 # 转码（系统 ffmpeg 优先，PyAV 备选，两者都没有则保留 mp4v）
 # ──────────────────────────────────────────────────────────────
-def transcode_h264(src: Path, dst: Path) -> Path:
+def transcode_h264(src: Path, dst: Path, preset: str = "medium", crf: int = 20) -> Path:
     """
     把 mp4v 原始视频转码为 H.264（yuv420p），提升播放器兼容性。
+    支持 -movflags +faststart 优化 Web 浏览器流式播放。
 
     优先级：
-      1. 系统 ffmpeg 子进程（编码效率最高、体积最小，CRF=20）
-      2. PyAV（纯 pip 安装，无需系统 ffmpeg；编码效率稍逊，用 CRF=28 控制体积）
+      1. 系统 ffmpeg 子进程（编码效率最高、体积最小）
+      2. PyAV（纯 pip 安装，无需系统 ffmpeg）
       3. 两者都没有：保留原始 mp4v 编码并告警
     """
     # 路径1：系统 ffmpeg（推荐，体积最优）
@@ -1728,20 +1729,22 @@ def transcode_h264(src: Path, dst: Path) -> Path:
             ffmpeg, "-y", "-loglevel", "error",
             "-i", str(src),
             "-c:v", "libx264",
-            "-crf", "20",
+            "-preset", str(preset),
+            "-crf", str(crf),
             "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",
             str(dst),
         ]
         res = subprocess.run(cmd, capture_output=True, text=True)
         if res.returncode == 0:
             src.unlink(missing_ok=True)
-            print(f"  H.264 转码完成(ffmpeg): {dst}")
+            print(f"  H.264 转码完成(ffmpeg faststart): {dst}")
             return dst
         print(f"  [warn] ffmpeg 转码失败: {res.stderr.strip()}")
 
     # 路径2：PyAV（备选，纯 pip 安装）
     try:
-        return _transcode_with_pyav(src, dst)
+        return _transcode_with_pyav(src, dst, preset=preset, crf=crf)
     except ImportError:
         pass
     except Exception as e:
@@ -1753,11 +1756,9 @@ def transcode_h264(src: Path, dst: Path) -> Path:
     return src
 
 
-def _transcode_with_pyav(src: Path, dst: Path) -> Path:
+def _transcode_with_pyav(src: Path, dst: Path, preset: str = "medium", crf: int = 28) -> Path:
     """
     用 PyAV 在 Python 内做 H.264 转码。PyAV 未装时抛 ImportError。
-    PyAV 自带的 libx264 编码效率低于系统 ffmpeg（同 CRF 下体积大数倍），
-    故用 CRF=28 平衡体积与画质。
     """
     import av
     input_container = av.open(str(src), mode="r")
@@ -1771,7 +1772,7 @@ def _transcode_with_pyav(src: Path, dst: Path) -> Path:
     out_stream.width = width
     out_stream.height = height
     out_stream.pix_fmt = "yuv420p"
-    out_stream.options = {"crf": "28", "preset": "medium"}
+    out_stream.options = {"crf": str(crf), "preset": preset, "movflags": "+faststart"}
 
     for frame in input_container.decode(video=0):
         packet = out_stream.encode(frame)

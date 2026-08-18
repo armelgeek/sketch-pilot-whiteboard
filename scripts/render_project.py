@@ -72,9 +72,10 @@ _FLAG_MAP = {
     "pen-style": "--pen-style",
     "hand-rotate": "--hand-rotate",       # bool: présent -> flag ajouté
     "bare-tip": "--bare-tip",             # bool: présent -> flag ajouté
+    "preview": "--preview",               # bool: présent -> flag ajouté
     "caption-font": "--caption-font",
 }
-_BOOL_FLAGS = {"hand-rotate", "bare-tip"}
+_BOOL_FLAGS = {"hand-rotate", "bare-tip", "preview"}
 
 
 def _resolve(base: Path, rel: str) -> Path:
@@ -139,6 +140,8 @@ def main(argv=None) -> int:
                    help="ne pas supprimer les MP4 par scène après la fusion")
     p.add_argument("--work-dir", default=None,
                    help="dossier pour les rendus intermédiaires par scène (défaut: <output>/_scenes)")
+    p.add_argument("--preview", action="store_true",
+                   help="rendu rapide basse résolution/fps pour toutes les scènes")
     args = p.parse_args(argv)
 
     manifest_path = Path(args.manifest).resolve()
@@ -163,8 +166,11 @@ def main(argv=None) -> int:
     transitions: list[str] = []
 
     render_defaults = {k: v for k, v in defaults.items() if k not in ("transition", "transitionMs")}
+    if args.preview:
+        render_defaults["preview"] = True
 
-    print(f"=== {len(scenes)} scène(s) à rendre ===")
+    jobs = []
+    print(f"=== Préparation de {len(scenes)} scène(s) à rendre ===")
     for i, scene in enumerate(scenes, start=1):
         image = _resolve(base, scene["image"])
         annotation = _resolve(base, scene["annotation"])
@@ -177,13 +183,28 @@ def main(argv=None) -> int:
 
         opts = {**render_defaults, **scene.get("overrides", {})}
         out_path = work_dir / f"scene{i:02d}_{image.stem}.mp4"
-
-        print(f"[{i}/{len(scenes)}] {image.name} + {annotation.name}")
-        if not render_scene(py_bin, image, annotation, out_path, hand, opts):
-            return 1
         scene_paths.append(out_path)
         if i < len(scenes):
             transitions.append(scene.get("transitionAfter", default_transition))
+
+        jobs.append((i, image, annotation, out_path, opts))
+
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _worker(job):
+        idx, img, ann, out_p, opts = job
+        print(f"[{idx}/{len(scenes)}] Lancement rendu: {img.name} + {ann.name}")
+        ok = render_scene(py_bin, img, ann, out_p, hand, opts)
+        return idx, ok
+
+    print(f"=== Rendu en parallèle de {len(jobs)} scène(s) (workers={min(4, len(jobs))}) ===")
+    with ThreadPoolExecutor(max_workers=min(4, len(jobs))) as pool:
+        futures = [pool.submit(_worker, j) for j in jobs]
+        for f in futures:
+            idx, ok = f.result()
+            if not ok:
+                print(f"[err] La scène #{idx} a échoué.", file=sys.stderr)
+                return 1
 
     print(f"=== Fusion de {len(scene_paths)} scène(s) -> {output} ===")
     if len(scene_paths) == 1:

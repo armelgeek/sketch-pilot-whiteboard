@@ -20,7 +20,34 @@ export async function saveSceneConfig(relPath, config) {
   return result
 }
 
-export async function renderSingleScene(sceneData, renderOpts = {}) {
+export async function getRenderJobStatus(jobId) {
+  const resp = await fetch(`/api/render_status?jobId=${encodeURIComponent(jobId)}`)
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({}))
+    throw new Error(err.error || 'Erreur lors de la récupération du statut du rendu')
+  }
+  return await resp.json()
+}
+
+export async function pollRenderJob(jobId, onProgress) {
+  while (true) {
+    const job = await getRenderJobStatus(jobId)
+    if (onProgress && typeof onProgress === 'function') {
+      onProgress(job)
+    }
+
+    if (job.status === 'completed') {
+      return job
+    }
+    if (job.status === 'failed') {
+      throw new Error(job.error || 'Le rendu a échoué')
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 1000))
+  }
+}
+
+export async function renderSingleScene(sceneData, renderOpts = {}, onProgress = null) {
   const payload = {
     imgPath: sceneData.imgPath || sceneData.imgName,
     jsonPath: sceneData.jsonPath || sceneData.cfgName,
@@ -37,12 +64,16 @@ export async function renderSingleScene(sceneData, renderOpts = {}) {
   })
   const data = await resp.json()
   if (!resp.ok || data.status === 'error') {
-    throw new Error(data.error || 'Échec du rendu de la scène')
+    throw new Error(data.error || 'Échec de la soumission du rendu')
+  }
+
+  if (data.jobId) {
+    return await pollRenderJob(data.jobId, onProgress)
   }
   return data
 }
 
-export async function mergeProjectScenes({ inputs, output = 'final.mp4', transitions = '', transitionMs = '' }) {
+export async function mergeProjectScenes({ inputs, output = 'final.mp4', transitions = '', transitionMs = '' }, onProgress = null) {
   const resp = await fetch('/api/merge_scenes', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -55,7 +86,11 @@ export async function mergeProjectScenes({ inputs, output = 'final.mp4', transit
   })
   const data = await resp.json()
   if (!resp.ok || data.status === 'error') {
-    throw new Error(data.error || 'Échec de la fusion du projet')
+    throw new Error(data.error || 'Échec de la soumission de la fusion')
+  }
+
+  if (data.jobId) {
+    return await pollRenderJob(data.jobId, onProgress)
   }
   return data
 }

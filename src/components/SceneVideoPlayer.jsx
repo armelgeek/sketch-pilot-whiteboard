@@ -117,6 +117,7 @@ export default function SceneVideoPlayer() {
             <video
               key={videoUrl}
               src={videoUrl}
+              preload="metadata"
               controls
               autoPlay
               className="w-full max-h-[520px] object-contain bg-black"
