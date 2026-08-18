@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { renderCanvas } from '../utils/render'
+import AnnotationCanvas from './AnnotationCanvas'
 
 export default function Canvas({
   cfg,
@@ -11,7 +12,11 @@ export default function Canvas({
   renderCaches,
   hideHint,
   onOpenDir,
-  onLoadSrt
+  onLoadSrt,
+  mode,
+  selectedElement,
+  scenes,
+  sceneIdx
 }) {
   const canvasRef = useRef()
   const containerRef = useRef()
@@ -115,6 +120,16 @@ export default function Canvas({
               📜 Charger un fichier SRT
             </button>
           </div>
+        </div>
+      ) : mode === 'draw' ? (
+        <div className="flex items-center justify-center">
+          <AnnotationCanvas
+            cfg={cfg}
+            imgUrl={scenes?.[sceneIdx]?.imgUrl}
+            selectedElement={selectedElement}
+            width={Math.min(800, containerRef.current?.clientWidth || 800)}
+            height={Math.min(600, containerRef.current?.clientHeight || 600)}
+          />
         </div>
       ) : (
         <canvas

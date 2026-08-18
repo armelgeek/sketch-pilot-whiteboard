@@ -355,6 +355,10 @@ export default function App() {
           hideHint={hideHint}
           onOpenDir={openDir}
           onLoadSrt={() => fileInputSrt.current?.click()}
+          mode={mode}
+          selectedElement={selectedElement}
+          scenes={scenes}
+          sceneIdx={sceneIdx}
         />
 
         {sceneIdx >= 0 && cfg && (
