@@ -128,6 +128,7 @@
       <option value="grid">▦ Grid</option>
     </select>
     <select id="r_colorFill" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-1.5 py-1 text-[11px] outline-none" title="Remplissage couleur (--color-fill)">
+      <option value="none">🚫 Aucun (Tracé direct)</option>
       <option value="brush" selected>🖌️ Brush</option>
       <option value="contour-wipe">〰️ Contour-wipe</option>
     </select>
@@ -207,6 +208,10 @@
         <select id="f_style" class="bg-[#222630] text-[#e6e8ec] border border-[#363c4a] rounded px-2 py-1 w-full text-xs outline-none focus:border-blue-500 disabled:opacity-50" disabled>
           <option value="">✏️ Dessin main (défaut)</option>
           <option value="wipe">➡️ Balayage (wipe)</option>
+          <option value="wipe_left_to_right">➡️ Balayage Gauche ➔ Droite</option>
+          <option value="wipe_right_to_left">⬅️ Balayage Droite ➔ Gauche</option>
+          <option value="wipe_top_to_bottom">⬇️ Balayage Haut ➔ Bas</option>
+          <option value="wipe_bottom_to_top">⬆️ Balayage Bas ➔ Haut</option>
           <option value="fade">🌫️ Fondu (fade)</option>
           <option value="typewriter">⌨️ Machine à écrire (texte)</option>
           <option value="zoom">🔍 Zoom (pop-in)</option>
@@ -938,6 +943,14 @@ function tipPos(e, p) {
       }
       return (d === 'top_to_bottom' || d === 'bottom_to_top') ? [basePos[0] + w, basePos[1]] : [basePos[0], basePos[1] + w];
     }
+  }
+  // Typewriter style hand position simulation
+  if (e.reveal.style === 'typewriter') {
+    const r = e.region;
+    const curX = r.x + r.width * p;
+    const midY = r.y + r.height / 2;
+    const wave = Math.sin(p * Math.PI * 28) * (r.height * 0.25);
+    return [curX, midY + wave];
   }
   // Fallback if no strokes detected
   const r = e.region;

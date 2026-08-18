@@ -709,7 +709,6 @@ class RegionStreamRenderer:
                 band = coords >= thresh
             else:
                 thresh = lo + t * (hi - lo)
-                band = coords <= thresh
             reveal = mask & band
             self.drawn[reveal] = color_f32[reveal]
             writer.write(self.drawn.astype(np.uint8))
@@ -757,10 +756,9 @@ class RegionStreamRenderer:
             writer.write(frame_img.astype(np.uint8))
         self.drawn[mask] = color_f32[mask]  # fixe l'état final dans le canvas persistant
 
-    # ── revealStyle="typewriter" (texte only) : comme wipe mais quantifié en
-    #    paliers (façon "chaque lettre saute d'un coup"), toujours
-    #    gauche->droite quel que soit `direction`, AVEC main écriture réelle.
-    def _typewriter_reveal(self, writer, frames: int, mask: np.ndarray, steps: int = 14) -> None:
+    # ── revealStyle="typewriter" (texte only) : écriture manuscrite ultra-réaliste
+    #    strictement de gauche à droite (lecture naturelle du texte).
+    def _typewriter_reveal(self, writer, frames: int, mask: np.ndarray, steps: int = 16) -> None:
         if frames <= 0:
             return
         if not mask.any():
@@ -768,53 +766,52 @@ class RegionStreamRenderer:
             for _ in range(frames):
                 writer.write(snap)
             return
+
         ys, xs = np.where(mask)
-        lo, hi = int(xs.min()), int(xs.max())
+        min_x, max_x = int(xs.min()), int(xs.max())
         min_y, max_y = int(ys.min()), int(ys.max())
-        height_span = max(10, max_y - min_y)
-        mid_y = (min_y + max_y) // 2
+        line_height = max(14, max_y - min_y)
+        mid_y = (min_y + max_y) / 2.0
         color_f32 = self.color_img.astype(np.float32)
 
-        steps = max(1, min(steps, frames))
-        frames_per_step = [len(c) for c in np.array_split(np.arange(frames), steps)]
-        step_idx = 0
-        frames_left_in_step = frames_per_step[0]
+        n_steps = max(2, min(steps, frames))
+        step_bounds = np.linspace(min_x, max_x, n_steps + 1)
+        frames_per_step = max(1, frames // n_steps)
+
+        prev_x, prev_y = float(min_x), float(mid_y)
+        smooth_angle = 0.0
 
         for f in range(frames):
-            while frames_left_in_step <= 0 and step_idx < steps - 1:
-                step_idx += 1
-                frames_left_in_step = frames_per_step[step_idx]
-
-            cur_total_in_step = max(1, frames_per_step[step_idx])
-            frame_in_step = cur_total_in_step - frames_left_in_step
-            step_progress = frame_in_step / cur_total_in_step  # 0.0 -> 1.0 dans la lettre
-
-            prev_thresh = lo + step_idx / steps * (hi - lo)
-            next_thresh = lo + (step_idx + 1) / steps * (hi - lo)
-            cur_x = prev_thresh + step_progress * (next_thresh - prev_thresh)
-
-            # Révéler le texte par palier de lettre
-            thresh = next_thresh if step_progress > 0.3 else prev_thresh
-            reveal = mask & (self._grid_x <= thresh)
-            self.drawn[reveal] = color_f32[reveal]
-
-            # Mouvement d'écriture manuscrite réaliste de la main :
-            # La main descend sur la feuille pour tracer la lettre, effectue une petite boucle Y (boucle de la lettre) et remonte légèrement (levé de stylo) avant la suivante.
-            stroke_y_wave = math.sin(step_progress * math.pi * 2) * (height_span * 0.4)
-            tip_x = int(cur_x)
-            tip_y = int(mid_y + stroke_y_wave)
-
-            # Animation de sortie fluide de la main à la fin
-            hand_alpha = 1.0
-            offset_y = 0
             progress = (f + 1) / frames
+            step_idx = min(n_steps - 1, f // frames_per_step)
+            step_frac = (f % frames_per_step) / float(frames_per_step)
+
+            x_start = step_bounds[step_idx]
+            x_end = step_bounds[step_idx + 1]
+
+            eased_frac = math.sin(step_frac * math.pi / 2.0)
+            target_x = x_start + (x_end - x_start) * eased_frac
+            target_y = mid_y + math.sin(step_frac * math.pi * 2.0) * (line_height * 0.35)
+
+            current_reveal_x = x_start + (x_end - x_start) * (1.0 if step_frac > 0.25 else step_frac * 2.0)
+            reveal_mask = mask & (self._grid_x <= current_reveal_x)
+            self.drawn[reveal_mask] = color_f32[reveal_mask]
+
+            dx = target_x - prev_x
+            dy = target_y - prev_y
+            raw_angle = math.degrees(math.atan2(dy, dx if abs(dx) > 1e-4 else 1e-4)) * 0.25
+            smooth_angle = smooth_angle * 0.75 + raw_angle * 0.25
+
+            hand_alpha = 1.0
+            offset_y = 0.0
             if progress > 0.88:
                 exit_t = (progress - 0.88) / 0.12
                 hand_alpha = max(0.0, 1.0 - exit_t)
-                offset_y = int(exit_t * 60)
+                offset_y = exit_t * 50.0
 
-            writer.write(self._snapshot_with_tip(tip_x, tip_y + offset_y, alpha=hand_alpha))
-            frames_left_in_step -= 1
+            writer.write(self._snapshot_with_tip(int(target_x), int(target_y + offset_y),
+                                                 alpha=hand_alpha, angle_deg=smooth_angle))
+            prev_x, prev_y = target_x, target_y
 
     @staticmethod
     def _ease_out_back(t: float) -> float:
@@ -1161,14 +1158,19 @@ class RegionStreamRenderer:
                 allowed, pre_clusters = elem_preps[idx]
                 style = reveal.get("style", "handwriting")
 
-                if style in ("wipe", "fade", "typewriter", "zoom", "slide", "rotate", "iris", "bounce"):
+                if style in ("wipe", "wipe_left_to_right", "wipe_right_to_left", "wipe_top_to_bottom", "wipe_bottom_to_top",
+                            "fade", "typewriter", "zoom", "slide", "rotate", "iris", "bounce"):
                     # styles progressifs sans main : révèlent directement dans la
                     # silhouette, pas de phase encre/couleur séparée
                     silhouette = self._silhouette_mask(allowed)
                     ever_silhouette |= silhouette
                     total_frames = max(1, round(dur_ms * cfg.fps / 1000))
-                    if style == "wipe":
-                        direction = reveal.get("direction", "top_to_bottom")
+                    if style.startswith("wipe"):
+                        if style == "wipe_left_to_right": direction = "left_to_right"
+                        elif style == "wipe_right_to_left": direction = "right_to_left"
+                        elif style == "wipe_top_to_bottom": direction = "top_to_bottom"
+                        elif style == "wipe_bottom_to_top": direction = "bottom_to_top"
+                        else: direction = reveal.get("direction", "top_to_bottom")
                         self._wipe_reveal(writer, total_frames, silhouette, direction)
                     elif style == "fade":
                         self._fade_reveal(writer, total_frames, silhouette)
